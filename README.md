@@ -3,7 +3,16 @@
 App para crear videos a partir de un guion, con estilos. Corre en tu propia computadora:
 no necesita hosting, dominio ni servidor pagado. Solo pagas las IAs que actives con tu clave.
 
-## Cómo abrirla
+## Descargas
+
+- **Windows:** `Videosyt.exe` en la sección *Releases* del repositorio. Doble clic y listo
+  (FFmpeg ya viene incluido). Videos y claves se guardan en la carpeta `Videosyt` de tu usuario.
+- **Android:** `Videosyt.apk` en *Releases*. Ábrelo en el teléfono y permite instalar apps de
+  fuentes desconocidas. El video se crea dentro del teléfono; mantén la app abierta mientras se monta.
+
+GitHub compila ambos gratis cada vez que se actualiza `main` (`.github/workflows/`).
+
+## Cómo abrirla desde el código (Windows, Mac o Linux)
 
 1. Instala **Python 3** (python.org) y **FFmpeg**:
    - Windows: `winget install ffmpeg`
@@ -61,6 +70,8 @@ aparece solo en la app.
 
 ## Archivos
 
+- `app.py`: versión de escritorio (ventana propia); es lo que se empaqueta en el .exe.
+- `android/`: la app de Android (Capacitor). `www/motor.js` hace todo el flujo en el teléfono.
 - `servidor.py`: la app (interfaz en `web/index.html`). Los videos quedan en `salida/`.
 - `videosyt.py`: el motor; también se puede usar por línea de comandos:
   `python3 videosyt.py ejemplos/guion.txt --estilo anime --salida video.mp4`
@@ -72,4 +83,3 @@ aparece solo en la app.
 1. Música de fondo (Suno o ElevenLabs Music) y subtítulos palabra por palabra (Whisper).
 2. Editar escenas antes de generar (cambiar texto o regenerar una imagen).
 3. Montaje con Remotion para transiciones y animaciones más ricas.
-4. Empaquetarla como programa instalable (.exe / .app) para no necesitar Python.
