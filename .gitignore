@@ -5,3 +5,6 @@ demos/
 .env
 salida/
 config.json
+node_modules/
+android/android/
+android/package-lock.json
