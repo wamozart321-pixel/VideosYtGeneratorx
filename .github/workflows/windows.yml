@@ -1,0 +1,58 @@
+name: Compilar Videosyt.exe
+
+on:
+  push:
+    branches: [main, app-web]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar herramientas
+        run: pip install pyinstaller pywebview
+
+      - name: Descargar FFmpeg
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip -OutFile ffmpeg.zip
+          Expand-Archive ffmpeg.zip -DestinationPath ffmpeg-dist
+          Copy-Item (Get-ChildItem ffmpeg-dist -Recurse -Filter ffmpeg.exe | Select-Object -First 1).FullName .
+
+      - name: Empaquetar
+        run: >
+          pyinstaller --noconfirm --onefile --windowed --name Videosyt
+          --add-data "web;web" --add-data "estilos;estilos" --add-data "fuentes;fuentes"
+          --add-binary "ffmpeg.exe;." --collect-all webview app.py
+
+      - name: Probar que el .exe crea un video
+        shell: pwsh
+        run: |
+          $env:VIDEOSYT_PRUEBA = "1"
+          $env:VIDEOSYT_DATOS = "$env:RUNNER_TEMP\videosyt"
+          Start-Process dist\Videosyt.exe -Wait
+          $video = "$env:RUNNER_TEMP\videosyt\salida\prueba.mp4"
+          if (-not (Test-Path $video)) { throw "El .exe no generó el video de prueba" }
+          Get-Item $video
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Videosyt-Windows
+          path: dist/Videosyt.exe
+
+      - name: Publicar descarga
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete windows-ultima --yes --cleanup-tag 2>$null
+          gh release create windows-ultima dist/Videosyt.exe --title "Videosyt para Windows" --notes "Descarga Videosyt.exe y ábrelo con doble clic."

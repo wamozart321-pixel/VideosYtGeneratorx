@@ -2,11 +2,12 @@
 
 Devuelve la URL de la imagen generada (o None en modo demo) para poder animarla después."""
 import os
-import subprocess
 import textwrap
 
+from . import ejecutar
 from .http import descargar, post
 from .montaje import ruta_filtro
+
 
 def generar(prompt, estilo, tamano, destino, numero):
     clave = os.environ.get("FAL_KEY")
@@ -33,7 +34,7 @@ def _tarjeta_demo(prompt, estilo, tamano, destino, numero):
         f.write(textwrap.fill(prompt, 30))
     fuente = ruta_filtro(estilo["fuente"])
     texto_f = ruta_filtro(texto)
-    subprocess.run(
+    ejecutar.run(
         ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
          "-i", f"color=c={estilo['fondo_demo']}:s={ancho}x{alto}", "-frames:v", "1",
          "-vf",

@@ -60,6 +60,7 @@
   .pill { font-size: 12px; padding: 2px 8px; border-radius: 99px; background: var(--soft); white-space: nowrap; }
   .pill.listo { color: var(--ok); } .pill.error { color: var(--accent); }
   .acciones { display: flex; gap: 8px; margin-top: 12px; }
+  .acciones { align-items: center; flex-wrap: wrap; }
   .acciones a { color: var(--accent); font-weight: 600; text-decoration: none; }
   .error { color: var(--accent); font-size: 14px; }
   dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--text);
@@ -188,7 +189,8 @@ function pintarVista(t) {
   if (t.estado === "listo") {
     if (v.dataset.id === t.id && v.dataset.estado === "listo") return;
     v.innerHTML = `<video controls autoplay src="/videos/${t.id}.mp4"></video>
-      <div class="acciones"><a href="/videos/${t.id}.mp4" download="videosyt-${t.id}.mp4">Descargar MP4</a></div>`;
+      <div class="acciones"><a href="/videos/${t.id}.mp4" download="videosyt-${t.id}.mp4">Descargar MP4</a>
+        <button type="button" onclick="fetch('/api/abrir-carpeta', {method: 'POST'})">Abrir carpeta de videos</button></div>`;
   } else if (t.estado === "error") {
     v.innerHTML = `<p class="error"></p>`; v.querySelector("p").textContent = "No se pudo crear: " + t.mensaje;
   } else {

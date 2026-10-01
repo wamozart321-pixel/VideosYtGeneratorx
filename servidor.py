@@ -6,6 +6,8 @@ Los videos se guardan en la carpeta salida/ y las claves de API en config.json.
 import json
 import os
 import queue
+import subprocess
+import sys
 import re
 import threading
 import time
@@ -17,8 +19,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import videosyt
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
-SALIDA = os.path.join(AQUI, "salida")
-CONFIG = os.path.join(AQUI, "config.json")
+DATOS = os.environ.get("VIDEOSYT_DATOS") or AQUI  # donde se guardan videos y claves
+SALIDA = os.path.join(DATOS, "salida")
+CONFIG = os.path.join(DATOS, "config.json")
 PUERTO = int(os.environ.get("PORT", "8000"))
 OPCIONALES = ["ELEVENLABS_VOICE_ID", "CLAUDE_MODEL"]
 
@@ -77,6 +80,13 @@ def resumen(t):
     return {k: t[k] for k in ("id", "titulo", "estilo", "estado", "progreso", "mensaje", "creado", "clips")}
 
 
+def abrir_carpeta(ruta):
+    if sys.platform == "win32":
+        os.startfile(ruta)
+    else:
+        subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", ruta])
+
+
 # ---------- HTTP ----------
 
 class Manejador(BaseHTTPRequestHandler):
@@ -131,6 +141,9 @@ class Manejador(BaseHTTPRequestHandler):
             }
             cola.put(id_)
             return self._json(resumen(trabajos[id_]), 201)
+        if self.path == "/api/abrir-carpeta":
+            abrir_carpeta(SALIDA)
+            return self._json({"ok": True})
         if self.path == "/api/config":
             guardar_config(self._leer())
             return self._json({"ok": True})
@@ -166,13 +179,22 @@ class Manejador(BaseHTTPRequestHandler):
                 restante -= len(bloque)
 
 
-if __name__ == "__main__":
+def iniciar(puerto=PUERTO):
+    """Arranca el servidor en segundo plano y devuelve su dirección."""
     os.makedirs(SALIDA, exist_ok=True)
     cargar_config()
     threading.Thread(target=trabajador, daemon=True).start()
-    servidor = ThreadingHTTPServer(("127.0.0.1", PUERTO), Manejador)
-    direccion = f"http://localhost:{PUERTO}"
+    servidor = ThreadingHTTPServer(("127.0.0.1", puerto), Manejador)
+    threading.Thread(target=servidor.serve_forever, daemon=True).start()
+    return f"http://localhost:{servidor.server_address[1]}", servidor
+
+
+if __name__ == "__main__":
+    direccion, servidor = iniciar()
     print(f"Videosyt abierto en {direccion}  (cierra esta ventana para salir)")
     if not os.environ.get("VIDEOSYT_SIN_NAVEGADOR"):
         threading.Timer(1, webbrowser.open, [direccion]).start()
-    servidor.serve_forever()
+    try:
+        threading.Event().wait()
+    except KeyboardInterrupt:
+        pass

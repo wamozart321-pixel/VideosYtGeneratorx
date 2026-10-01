@@ -1,7 +1,8 @@
 """Paso 4: une imagen + voz + subtítulos de cada escena y concatena el video final."""
 import os
-import subprocess
 import textwrap
+
+from . import ejecutar
 
 FPS = 25
 AQUI = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -36,7 +37,7 @@ def clip(imagen, audio, narracion, duracion, estilo, tamano, destino, video=None
         f"fontcolor={estilo['color_texto']}:box=1:boxcolor=black@0.55:boxborderw=14:"
         f"line_spacing=6:x=(w-tw)/2:y=h-th-h*0.08"
     )
-    subprocess.run(
+    ejecutar.run(
         ["ffmpeg", "-y", "-loglevel", "error", *entrada, "-i", audio,
          "-map", "0:v", "-map", "1:a", "-vf", filtro, "-t", f"{duracion:.2f}", "-c:v", "libx264", "-pix_fmt", "yuv420p",
          "-c:a", "aac", "-ar", "44100", "-ac", "2", destino],
@@ -48,7 +49,7 @@ def unir(clips, destino):
     lista = os.path.join(os.path.dirname(os.path.abspath(clips[0])), "lista.txt")
     with open(lista, "w") as f:
         f.writelines(f"file '{os.path.abspath(c)}'\n" for c in clips)
-    subprocess.run(
+    ejecutar.run(
         ["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0",
          "-i", lista, "-c", "copy", destino],
         check=True,
