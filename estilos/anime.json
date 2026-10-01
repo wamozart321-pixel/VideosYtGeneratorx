@@ -1,0 +1,10 @@
+{
+  "nombre": "Anime",
+  "prompt_imagen": "anime style, studio ghibli inspired, vibrant colors, soft cel shading",
+  "formato": "16:9",
+  "fondo_demo": "0xff7eb6",
+  "color_texto": "white",
+  "fuente": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+  "zoom": 0.0015,
+  "voz": "joven y energética"
+}

@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+demos/
+*.mp4
+.env
