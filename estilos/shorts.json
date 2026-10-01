@@ -4,7 +4,7 @@
   "formato": "9:16",
   "fondo_demo": "0x0f9b8e",
   "color_texto": "yellow",
-  "fuente": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+  "fuente": "fuentes/DejaVuSans-Bold.ttf",
   "zoom": 0.0020,
   "voz": "rápida y entusiasta"
 }

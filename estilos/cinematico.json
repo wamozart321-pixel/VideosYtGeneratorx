@@ -4,7 +4,7 @@
   "formato": "16:9",
   "fondo_demo": "0x1a1a2e",
   "color_texto": "white",
-  "fuente": "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
+  "fuente": "fuentes/DejaVuSerif-Bold.ttf",
   "zoom": 0.0010,
   "voz": "narrador grave y pausado"
 }

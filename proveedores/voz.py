@@ -4,14 +4,13 @@ import subprocess
 
 from .http import post
 
-VOZ = os.environ.get("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
-
 
 def narrar(texto, destino):
     clave = os.environ.get("ELEVENLABS_API_KEY")
     if clave:
+        voz = os.environ.get("ELEVENLABS_VOICE_ID") or "21m00Tcm4TlvDq8ikWAM"
         audio = post(
-            f"https://api.elevenlabs.io/v1/text-to-speech/{VOZ}",
+            f"https://api.elevenlabs.io/v1/text-to-speech/{voz}",
             {"xi-api-key": clave, "accept": "audio/mpeg"},
             {"text": texto, "model_id": "eleven_multilingual_v2"},
             binario=True,
