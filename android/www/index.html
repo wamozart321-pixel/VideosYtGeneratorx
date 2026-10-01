@@ -54,6 +54,7 @@
            width: calc(100% - 32px); max-width: 520px; padding: 16px; }
   dialog::backdrop { background: rgba(0,0,0,.5); }
   .estado-clave { font-size: 12px; } .estado-clave.on { color: var(--ok); } .estado-clave.off { color: var(--muted); }
+  .quitar { font-size: 12px; padding: 2px 8px; margin-left: 6px; border-radius: 8px; }
 </style>
 </head>
 <body>
@@ -206,20 +207,28 @@ $("#abrirConfig").onclick = () => {
   for (const [k, nombre, sitio, secreta] of CAMPOS) {
     const d = document.createElement("div");
     d.innerHTML = `<div class="fila"><label class="t" for="${k}">${nombre}</label>
-      <span class="estado-clave ${c[k] ? "on" : "off"}">${c[k] ? "configurada" : "sin configurar"}</span></div>
+      <span class="estado-clave ${c[k] ? "on" : "off"}">${c[k] ? "configurada" : "sin configurar"}
+        ${secreta && c[k] ? '<button type="button" class="quitar">Quitar</button>' : ""}</span></div>
       <input id="${k}" type="${secreta ? "password" : "text"}" autocomplete="off" ${secreta ? 'placeholder="Deja vacío para no cambiarla"' : ""}>
       ${sitio ? `<div class="ayuda">Se obtiene en ${sitio}</div>` : ""}`;
     if (!secreta) d.querySelector("input").value = c[k] || "";
+    const quitar = d.querySelector(".quitar");
+    if (quitar) quitar.onclick = () => marcarQuitar(d.querySelector("input"), quitar);
     cont.appendChild(d);
   }
   $("#config").showModal();
 };
+function marcarQuitar(input, boton) {
+  input.value = ""; input.dataset.quitar = "1";
+  input.placeholder = "Se quitará al guardar";
+  boton.textContent = "Se quitará"; boton.disabled = true;
+}
 $("#cerrarConfig").onclick = () => $("#config").close();
 $("#guardarConfig").onclick = () => {
   const c = claves();
   for (const [k, , , secreta] of CAMPOS) {
     const v = $("#" + k).value.trim();
-    if (!secreta || v) { if (v) c[k] = v; else delete c[k]; }
+    if (!secreta || v || $("#" + k).dataset.quitar) { if (v) c[k] = v; else delete c[k]; }
   }
   localStorage.setItem("claves", JSON.stringify(c));
   $("#config").close(); pintarModo();

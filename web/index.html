@@ -71,6 +71,7 @@
   .fila { display: flex; justify-content: space-between; align-items: baseline; }
   .estado-clave { font-size: 12px; }
   .estado-clave.on { color: var(--ok); } .estado-clave.off { color: var(--muted); }
+  .quitar { font-size: 12px; padding: 2px 8px; margin-left: 6px; border-radius: 8px; }
   @media (max-width: 520px) { header { padding: 12px 16px; } .modo { display: none; } .card { padding: 16px; } }
   .derecha { display: flex; flex-direction: column; gap: 20px; }
 </style>
@@ -229,21 +230,29 @@ $("#abrirConfig").onclick = () => {
     const on = secreta ? estado.claves[k] : !!estado.claves[k];
     const div = document.createElement("div");
     div.innerHTML = `<div class="fila"><label class="t" for="${k}"></label>
-      <span class="estado-clave ${on ? "on" : "off"}">${on ? "configurada" : "sin configurar"}</span></div>
+      <span class="estado-clave ${on ? "on" : "off"}">${on ? "configurada" : "sin configurar"}
+        ${secreta && on ? '<button type="button" class="quitar">Quitar</button>' : ""}</span></div>
       <input id="${k}" type="${secreta ? "password" : "text"}" autocomplete="off">
       ${sitio ? `<div class="ayuda">Se obtiene en ${sitio}</div>` : ""}`;
     div.querySelector("label").textContent = nombre;
     if (!secreta) div.querySelector("input").value = estado.claves[k] || "";
+    const quitar = div.querySelector(".quitar");
+    if (quitar) quitar.onclick = () => marcarQuitar(div.querySelector("input"), quitar);
     c.appendChild(div);
   }
   $("#config").showModal();
 };
+function marcarQuitar(input, boton) {
+  input.value = ""; input.dataset.quitar = "1";
+  input.placeholder = "Se quitará al guardar";
+  boton.textContent = "Se quitará"; boton.disabled = true;
+}
 $("#cerrarConfig").onclick = () => $("#config").close();
 $("#guardarConfig").onclick = async () => {
   const datos = {};
   for (const [k, , , secreta] of CAMPOS) {
     const v = $("#" + k).value;
-    if (!secreta || v) datos[k] = v;
+    if (!secreta || v || $("#" + k).dataset.quitar) datos[k] = v;
   }
   await api("/api/config", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(datos)});
   $("#config").close(); cargarEstado();
