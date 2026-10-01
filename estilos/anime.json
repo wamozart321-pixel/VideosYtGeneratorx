@@ -4,7 +4,7 @@
   "formato": "16:9",
   "fondo_demo": "0xff7eb6",
   "color_texto": "white",
-  "fuente": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+  "fuente": "fuentes/DejaVuSans-Bold.ttf",
   "zoom": 0.0015,
   "voz": "joven y energética"
 }

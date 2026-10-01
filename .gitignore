@@ -3,3 +3,8 @@ __pycache__/
 demos/
 *.mp4
 .env
+salida/
+config.json
+node_modules/
+android/android/
+android/package-lock.json

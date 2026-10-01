@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Videosyt</title>
+<style>
+  :root {
+    --bg: #f6f6f8; --panel: #ffffff; --text: #17171c; --muted: #6b6b76; --line: #e3e3e8;
+    --accent: #e5484d; --accent-text: #fff; --ok: #2f9e5a; --warn: #b7791f; --soft: #f0f0f3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111114; --panel: #1b1b20; --text: #ededf0; --muted: #9a9aa5; --line: #2c2c33;
+            --accent: #ff5f63; --soft: #24242a; --ok: #46c27a; --warn: #e0a743; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 16px 24px; border-bottom: 1px solid var(--line);
+           background: var(--panel); position: sticky; top: 0; z-index: 2; }
+  .logo { font-weight: 800; font-size: 20px; letter-spacing: -.02em; }
+  .logo span { color: var(--accent); }
+  .modo { font-size: 12px; color: var(--muted); }
+  header button { margin-left: auto; }
+  main { max-width: 1200px; margin: 0 auto; padding: 24px 16px 64px; display: grid;
+         grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 20px; }
+  @media (max-width: 860px) { main { grid-template-columns: minmax(0, 1fr); } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
+  h2 { font-size: 15px; margin: 0 0 14px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  label.t { display: block; font-weight: 600; margin: 16px 0 8px; }
+  textarea { width: 100%; min-height: 220px; resize: vertical; padding: 12px; border-radius: 10px;
+             border: 1px solid var(--line); background: var(--soft); color: var(--text); font: inherit; }
+  textarea:focus, input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .ayuda { font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .estilos { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+  .estilo { border: 2px solid var(--line); border-radius: 12px; padding: 10px; cursor: pointer; background: var(--panel);
+            text-align: left; color: var(--text); font: inherit; }
+  .estilo[aria-pressed="true"] { border-color: var(--accent); }
+  .muestra { border-radius: 8px; display: flex; align-items: flex-end; justify-content: center; padding: 6px;
+             font-size: 11px; font-weight: 700; margin-bottom: 8px; height: 70px; }
+  .muestra.v { width: 40px; margin-left: auto; margin-right: auto; }
+  .estilo b { display: block; font-size: 14px; }
+  .estilo small { color: var(--muted); }
+  .check { display: flex; gap: 10px; align-items: flex-start; margin-top: 16px; }
+  .check input { margin-top: 4px; accent-color: var(--accent); }
+  button { font: inherit; border-radius: 10px; border: 1px solid var(--line); background: var(--panel);
+           color: var(--text); padding: 8px 14px; cursor: pointer; }
+  button.primario { background: var(--accent); color: var(--accent-text); border: 0; font-weight: 700;
+                    padding: 12px 20px; width: 100%; margin-top: 20px; font-size: 16px; }
+  button:disabled { opacity: .5; cursor: default; }
+  .barra { height: 8px; background: var(--soft); border-radius: 99px; overflow: hidden; margin: 10px 0; }
+  .barra div { height: 100%; width: 0; background: var(--accent); transition: width .4s; }
+  video { width: 100%; max-height: 520px; border-radius: 10px; background: #000; display: block; }
+  .vacio { color: var(--muted); text-align: center; padding: 60px 10px; border: 1px dashed var(--line); border-radius: 10px; }
+  .lista { list-style: none; margin: 0; padding: 0; }
+  .lista li { display: flex; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+  .lista li:first-child { border-top: 0; }
+  .lista .titulo { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lista small { color: var(--muted); }
+  .pill { font-size: 12px; padding: 2px 8px; border-radius: 99px; background: var(--soft); white-space: nowrap; }
+  .pill.listo { color: var(--ok); } .pill.error { color: var(--accent); }
+  .acciones { display: flex; gap: 8px; margin-top: 12px; }
+  .acciones { align-items: center; flex-wrap: wrap; }
+  .acciones a { color: var(--accent); font-weight: 600; text-decoration: none; }
+  .error { color: var(--accent); font-size: 14px; }
+  dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--text);
+           width: min(520px, calc(100% - 32px)); padding: 20px; }
+  dialog::backdrop { background: rgba(0,0,0,.45); }
+  dialog input { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--line);
+                 background: var(--soft); color: var(--text); font: inherit; }
+  .fila { display: flex; justify-content: space-between; align-items: baseline; }
+  .estado-clave { font-size: 12px; }
+  .estado-clave.on { color: var(--ok); } .estado-clave.off { color: var(--muted); }
+  @media (max-width: 520px) { header { padding: 12px 16px; } .modo { display: none; } .card { padding: 16px; } }
+  .derecha { display: flex; flex-direction: column; gap: 20px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Videos<span>yt</span></div>
+  <div class="modo" id="modo"></div>
+  <button id="abrirConfig">Configurar IAs</button>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Nuevo video</h2>
+    <label class="t" for="guion">Guion</label>
+    <textarea id="guion" placeholder="Escribe o pega tu guion aquí. Cada párrafo será una escena."></textarea>
+    <div class="ayuda" id="conteo">0 palabras</div>
+
+    <label class="t">Estilo</label>
+    <div class="estilos" id="estilos"></div>
+
+    <label class="check">
+      <input type="checkbox" id="clips">
+      <span>Animar cada escena con video IA (Kling)<br>
+        <small class="ayuda">Más realista pero más lento y caro. Requiere la clave de fal.ai.</small></span>
+    </label>
+
+    <button class="primario" id="generar">Generar video</button>
+    <div class="error" id="errorForm"></div>
+  </section>
+
+  <div class="derecha">
+    <section class="card">
+      <h2>Vista previa</h2>
+      <div id="vista"><div class="vacio">Tu video aparecerá aquí.</div></div>
+    </section>
+    <section class="card">
+      <h2>Mis videos</h2>
+      <ul class="lista" id="lista"><li><small>Todavía no has creado videos.</small></li></ul>
+    </section>
+  </div>
+</main>
+
+<dialog id="config">
+  <h2>Configurar IAs</h2>
+  <p class="ayuda">Sin claves la app funciona en modo demo. Cada clave activa la IA real de ese paso.
+    Se guardan solo en tu equipo, en <code>config.json</code>. Deja un campo vacío para no cambiarlo.</p>
+  <div id="camposClaves"></div>
+  <div class="acciones" style="justify-content:flex-end">
+    <button id="cerrarConfig">Cancelar</button>
+    <button id="guardarConfig" class="primario" style="width:auto;margin:0">Guardar</button>
+  </div>
+</dialog>
+
+<script>
+const $ = s => document.querySelector(s);
+const CAMPOS = [
+  ["ANTHROPIC_API_KEY", "Claude (guion y escenas)", "console.anthropic.com", true],
+  ["ELEVENLABS_API_KEY", "ElevenLabs (voz)", "elevenlabs.io", true],
+  ["FAL_KEY", "fal.ai (imágenes y video)", "fal.ai", true],
+  ["ELEVENLABS_VOICE_ID", "ID de voz de ElevenLabs (opcional)", "", false],
+];
+let estado = null, estiloElegido = null, actual = null;
+
+async function api(ruta, opciones) {
+  const r = await fetch(ruta, opciones);
+  const datos = await r.json();
+  if (!r.ok) throw new Error(datos.error || "Error");
+  return datos;
+}
+
+async function cargarEstado() {
+  estado = await api("/api/estado");
+  const m = estado.modo, nombres = {guion: "Guion", voz: "Voz", imagen: "Imágenes"};
+  const activos = Object.keys(m).filter(k => m[k]);
+  $("#modo").textContent = activos.length
+    ? "IA activa: " + activos.map(k => nombres[k]).join(", ") + (activos.length < 3 ? " · resto en demo" : "")
+    : "Modo demo (sin claves de IA)";
+  $("#clips").disabled = !m.imagen;
+  if (!m.imagen) $("#clips").checked = false;
+  pintarEstilos();
+}
+
+function pintarEstilos() {
+  const cont = $("#estilos"); cont.innerHTML = "";
+  for (const [id, e] of Object.entries(estado.estilos)) {
+    if (!estiloElegido) estiloElegido = id;
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "estilo"; b.setAttribute("aria-pressed", id === estiloElegido);
+    const color = "#" + e.fondo_demo.replace("0x", "");
+    b.innerHTML = `<div class="muestra ${e.formato === "9:16" ? "v" : ""}" style="background:${color};color:${e.color_texto}">Aa</div>
+                   <b></b><small>${e.formato === "9:16" ? "Vertical 9:16" : "Horizontal 16:9"}</small>`;
+    b.querySelector("b").textContent = e.nombre;
+    b.onclick = () => { estiloElegido = id; pintarEstilos(); };
+    cont.appendChild(b);
+  }
+}
+
+$("#guion").addEventListener("input", e => {
+  const t = e.target.value.trim(), palabras = t ? t.split(/\s+/).length : 0;
+  const escenas = t ? t.split(/\n\s*\n/).filter(p => p.trim()).length : 0;
+  $("#conteo").textContent = `${palabras} palabras · ${escenas} escena${escenas === 1 ? "" : "s"} · ~${Math.round(palabras / 2.5)} s de video`;
+});
+
+$("#generar").onclick = async () => {
+  $("#errorForm").textContent = "";
+  try {
+    const t = await api("/api/videos", {method: "POST", headers: {"content-type": "application/json"},
+      body: JSON.stringify({guion: $("#guion").value, estilo: estiloElegido, clips: $("#clips").checked})});
+    actual = t.id; pintarVista(t); cargarLista();
+  } catch (e) { $("#errorForm").textContent = e.message; }
+};
+
+function pintarVista(t) {
+  const v = $("#vista");
+  if (t.estado === "listo") {
+    if (v.dataset.id === t.id && v.dataset.estado === "listo") return;
+    v.innerHTML = `<video controls autoplay src="/videos/${t.id}.mp4"></video>
+      <div class="acciones"><a href="/videos/${t.id}.mp4" download="videosyt-${t.id}.mp4">Descargar MP4</a>
+        <button type="button" onclick="fetch('/api/abrir-carpeta', {method: 'POST'})">Abrir carpeta de videos</button></div>`;
+  } else if (t.estado === "error") {
+    v.innerHTML = `<p class="error"></p>`; v.querySelector("p").textContent = "No se pudo crear: " + t.mensaje;
+  } else {
+    if (!v.querySelector(".barra")) v.innerHTML = `<div class="fila"><b>Generando…</b><span id="pct"></span></div>
+      <div class="barra"><div></div></div><div class="ayuda" id="msg"></div>`;
+    v.querySelector(".barra div").style.width = t.progreso + "%";
+    $("#pct").textContent = t.progreso + "%"; $("#msg").textContent = t.mensaje;
+  }
+  v.dataset.id = t.id; v.dataset.estado = t.estado;
+}
+
+async function cargarLista() {
+  const lista = await api("/api/videos"), ul = $("#lista");
+  if (!lista.length) return;
+  ul.innerHTML = "";
+  for (const t of lista) {
+    const li = document.createElement("li");
+    const nombre = estado.estilos[t.estilo]?.nombre || t.estilo;
+    li.innerHTML = `<div class="titulo"><div></div><small>${nombre} · ${new Date(t.creado * 1000).toLocaleTimeString()}</small></div>
+      <span class="pill ${t.estado}">${t.estado === "generando" ? t.progreso + "%" : t.estado}</span>`;
+    li.querySelector(".titulo div").textContent = t.titulo;
+    if (t.estado === "listo") {
+      const b = document.createElement("button"); b.textContent = "Ver";
+      b.onclick = () => { actual = t.id; pintarVista(t); }; li.appendChild(b);
+    }
+    ul.appendChild(li);
+    if (t.id === actual) pintarVista(t);
+  }
+}
+setInterval(cargarLista, 1500);
+
+// Configuración de claves
+$("#abrirConfig").onclick = () => {
+  const c = $("#camposClaves"); c.innerHTML = "";
+  for (const [k, nombre, sitio, secreta] of CAMPOS) {
+    const on = secreta ? estado.claves[k] : !!estado.claves[k];
+    const div = document.createElement("div");
+    div.innerHTML = `<div class="fila"><label class="t" for="${k}"></label>
+      <span class="estado-clave ${on ? "on" : "off"}">${on ? "configurada" : "sin configurar"}</span></div>
+      <input id="${k}" type="${secreta ? "password" : "text"}" autocomplete="off">
+      ${sitio ? `<div class="ayuda">Se obtiene en ${sitio}</div>` : ""}`;
+    div.querySelector("label").textContent = nombre;
+    if (!secreta) div.querySelector("input").value = estado.claves[k] || "";
+    c.appendChild(div);
+  }
+  $("#config").showModal();
+};
+$("#cerrarConfig").onclick = () => $("#config").close();
+$("#guardarConfig").onclick = async () => {
+  const datos = {};
+  for (const [k, , , secreta] of CAMPOS) {
+    const v = $("#" + k).value;
+    if (!secreta || v) datos[k] = v;
+  }
+  await api("/api/config", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(datos)});
+  $("#config").close(); cargarEstado();
+};
+
+cargarEstado().then(cargarLista);
+</script>
+</body>
+</html>

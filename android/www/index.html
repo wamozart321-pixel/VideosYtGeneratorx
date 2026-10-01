@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Videosyt</title>
+<style>
+  :root { --bg: #f6f6f8; --panel: #fff; --text: #17171c; --muted: #6b6b76; --line: #e3e3e8;
+          --accent: #e5484d; --soft: #f0f0f3; --ok: #2f9e5a; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111114; --panel: #1b1b20; --text: #ededf0; --muted: #9a9aa5; --line: #2c2c33;
+            --accent: #ff5f63; --soft: #24242a; --ok: #46c27a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.5 system-ui, Roboto, sans-serif; padding-bottom: env(safe-area-inset-bottom); }
+  header { display: flex; align-items: center; padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+           background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 2; }
+  .logo { font-weight: 800; font-size: 20px; } .logo span { color: var(--accent); }
+  header button { margin-left: auto; }
+  main { max-width: 640px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  h2 { font-size: 13px; margin: 0 0 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  label.t { display: block; font-weight: 600; margin: 14px 0 8px; }
+  textarea, input { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--line);
+                    background: var(--soft); color: var(--text); font: inherit; }
+  textarea { min-height: 180px; resize: vertical; }
+  .ayuda { font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .estilos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .estilo { border: 2px solid var(--line); border-radius: 12px; padding: 8px; background: var(--panel);
+            color: var(--text); font: inherit; text-align: left; }
+  .estilo[aria-pressed="true"] { border-color: var(--accent); }
+  .muestra { height: 52px; border-radius: 8px; margin-bottom: 6px; display: flex; align-items: flex-end;
+             justify-content: center; font-size: 11px; font-weight: 700; padding: 4px; }
+  .muestra.v { width: 30px; margin: 0 auto 6px; }
+  .estilo b { display: block; font-size: 13px; line-height: 1.25; }
+  .estilo small { color: var(--muted); font-size: 11px; }
+  .check { display: flex; gap: 10px; align-items: flex-start; margin-top: 14px; }
+  .check input { width: auto; margin-top: 5px; accent-color: var(--accent); }
+  button { font: inherit; border-radius: 10px; border: 1px solid var(--line); background: var(--panel);
+           color: var(--text); padding: 10px 14px; }
+  button.primario { background: var(--accent); color: #fff; border: 0; font-weight: 700; width: 100%;
+                    padding: 14px; margin-top: 16px; }
+  button:disabled { opacity: .5; }
+  .barra { height: 8px; background: var(--soft); border-radius: 99px; overflow: hidden; margin: 10px 0; }
+  .barra div { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+  .fila { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  video, canvas#lienzo { width: 100%; max-height: 70vh; border-radius: 10px; background: #000; display: block; object-fit: contain; }
+  .acciones { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .acciones button { flex: 1; }
+  .error { color: var(--accent); font-size: 14px; margin-top: 8px; }
+  .oculto { display: none !important; }
+  dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--text);
+           width: calc(100% - 32px); max-width: 520px; padding: 16px; }
+  dialog::backdrop { background: rgba(0,0,0,.5); }
+  .estado-clave { font-size: 12px; } .estado-clave.on { color: var(--ok); } .estado-clave.off { color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Videos<span>yt</span></div>
+  <button id="abrirConfig">Configurar IAs</button>
+</header>
+
+<main>
+  <section class="card" id="formulario">
+    <h2>Nuevo video</h2>
+    <div class="ayuda" id="modo"></div>
+    <label class="t" for="guion">Guion</label>
+    <textarea id="guion" placeholder="Escribe o pega tu guion. Cada párrafo será una escena."></textarea>
+    <div class="ayuda" id="conteo">0 palabras</div>
+    <label class="t">Estilo</label>
+    <div class="estilos" id="estilos"></div>
+    <label class="check">
+      <input type="checkbox" id="clips">
+      <span>Animar cada escena con video IA (Kling)<br><small class="ayuda">Más lento y caro. Requiere la clave de fal.ai.</small></span>
+    </label>
+    <button class="primario" id="generar">Generar video</button>
+    <div class="error" id="error"></div>
+  </section>
+
+  <section class="card oculto" id="progreso">
+    <div class="fila"><b>Creando tu video…</b><span id="pct">0%</span></div>
+    <div class="barra"><div id="barra"></div></div>
+    <div class="ayuda" id="mensaje"></div>
+    <div class="ayuda">Mantén la app abierta y la pantalla encendida mientras se monta.</div>
+    <canvas id="lienzo" style="margin-top:12px"></canvas>
+  </section>
+
+  <section class="card oculto" id="resultado">
+    <h2>Tu video</h2>
+    <video id="video" controls playsinline></video>
+    <div class="acciones">
+      <button id="compartir">Guardar / Compartir</button>
+      <button id="otro">Crear otro</button>
+    </div>
+    <div class="ayuda" id="guardado"></div>
+  </section>
+</main>
+
+<dialog id="config">
+  <h2>Configurar IAs</h2>
+  <p class="ayuda">Sin claves la app funciona en modo demo. Cada clave activa la IA real de ese paso y se guarda solo en este teléfono.</p>
+  <div id="campos"></div>
+  <div class="acciones">
+    <button id="cerrarConfig">Cancelar</button>
+    <button id="guardarConfig" class="primario" style="margin:0">Guardar</button>
+  </div>
+</dialog>
+
+<script type="module">
+import { ESTILOS, crearVideo } from "./motor.js";
+
+const $ = s => document.querySelector(s);
+const CAMPOS = [
+  ["ANTHROPIC_API_KEY", "Claude (guion y escenas)", "console.anthropic.com", true],
+  ["ELEVENLABS_API_KEY", "ElevenLabs (voz)", "elevenlabs.io", true],
+  ["FAL_KEY", "fal.ai (imágenes y video)", "fal.ai", true],
+  ["ELEVENLABS_VOICE_ID", "ID de voz de ElevenLabs (opcional)", "", false],
+];
+const Plugins = window.Capacitor?.Plugins || {};
+let estilo = "cinematico", blob = null;
+
+function claves() {
+  try { return JSON.parse(localStorage.getItem("claves") || "{}"); } catch { return {}; }
+}
+
+function pintarModo() {
+  const c = claves(), activos = [["ANTHROPIC_API_KEY", "Guion"], ["ELEVENLABS_API_KEY", "Voz"], ["FAL_KEY", "Imágenes"]]
+    .filter(([k]) => c[k]).map(([, n]) => n);
+  $("#modo").textContent = activos.length ? "IA activa: " + activos.join(", ") : "Modo demo (sin claves de IA)";
+  $("#clips").disabled = !c.FAL_KEY;
+  if (!c.FAL_KEY) $("#clips").checked = false;
+}
+
+function pintarEstilos() {
+  const cont = $("#estilos"); cont.innerHTML = "";
+  for (const [id, e] of Object.entries(ESTILOS)) {
+    const b = document.createElement("button");
+    b.className = "estilo"; b.setAttribute("aria-pressed", id === estilo);
+    b.innerHTML = `<div class="muestra ${e.formato === "9:16" ? "v" : ""}" style="background:${e.fondo};color:${e.texto}">Aa</div>
+      <b>${e.nombre}</b><small>${e.formato === "9:16" ? "Vertical" : "Horizontal"}</small>`;
+    b.onclick = () => { estilo = id; pintarEstilos(); };
+    cont.appendChild(b);
+  }
+}
+
+$("#guion").addEventListener("input", e => {
+  const t = e.target.value.trim(), p = t ? t.split(/\s+/).length : 0;
+  const n = t ? t.split(/\n\s*\n/).filter(x => x.trim()).length : 0;
+  $("#conteo").textContent = `${p} palabras · ${n} escena${n === 1 ? "" : "s"} · ~${Math.round(p / 2.5)} s de video`;
+});
+
+$("#generar").onclick = async () => {
+  const guion = $("#guion").value.trim();
+  $("#error").textContent = "";
+  if (!guion) { $("#error").textContent = "El guion está vacío"; return; }
+  const audio = new AudioContext();
+  await audio.resume();
+  $("#generar").disabled = true;
+  $("#progreso").classList.remove("oculto"); $("#resultado").classList.add("oculto");
+  try {
+    blob = await crearVideo({
+      guion, estilo, clips: $("#clips").checked, claves: claves(), audio, lienzo: $("#lienzo"),
+      avisar: (pct, msg) => { $("#pct").textContent = pct + "%"; $("#barra").style.width = pct + "%"; $("#mensaje").textContent = msg; },
+    });
+    $("#video").src = URL.createObjectURL(blob);
+    $("#guardado").textContent = "";
+    $("#resultado").classList.remove("oculto");
+    $("#resultado").scrollIntoView({ behavior: "smooth" });
+  } catch (e) {
+    console.error(e);
+    $("#error").textContent = "No se pudo crear: " + e.message;
+  } finally {
+    $("#progreso").classList.add("oculto");
+    $("#generar").disabled = false;
+    audio.close();
+  }
+};
+
+function base64(b) {
+  return new Promise(ok => { const r = new FileReader(); r.onload = () => ok(r.result.split(",")[1]); r.readAsDataURL(b); });
+}
+
+$("#compartir").onclick = async () => {
+  const ext = blob.type.includes("mp4") ? "mp4" : "webm";
+  const nombre = `videosyt-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.${ext}`;
+  if (!Plugins.Filesystem) {  // en un navegador normal: descarga directa
+    const a = document.createElement("a"); a.href = $("#video").src; a.download = nombre; a.click(); return;
+  }
+  const { Filesystem, Share } = Plugins, data = await base64(blob);
+  let guardado;
+  try {
+    guardado = await Filesystem.writeFile({ path: `Videosyt/${nombre}`, data, directory: "DOCUMENTS", recursive: true });
+    $("#guardado").textContent = `Guardado en Documentos/Videosyt/${nombre}`;
+  } catch {
+    guardado = await Filesystem.writeFile({ path: nombre, data, directory: "CACHE" });
+  }
+  try { await Share.share({ title: "Mi video de Videosyt", files: [guardado.uri] }); } catch { /* el usuario cerró el menú */ }
+};
+
+$("#otro").onclick = () => { $("#resultado").classList.add("oculto"); window.scrollTo({ top: 0, behavior: "smooth" }); };
+
+$("#abrirConfig").onclick = () => {
+  const c = claves(), cont = $("#campos"); cont.innerHTML = "";
+  for (const [k, nombre, sitio, secreta] of CAMPOS) {
+    const d = document.createElement("div");
+    d.innerHTML = `<div class="fila"><label class="t" for="${k}">${nombre}</label>
+      <span class="estado-clave ${c[k] ? "on" : "off"}">${c[k] ? "configurada" : "sin configurar"}</span></div>
+      <input id="${k}" type="${secreta ? "password" : "text"}" autocomplete="off" ${secreta ? 'placeholder="Deja vacío para no cambiarla"' : ""}>
+      ${sitio ? `<div class="ayuda">Se obtiene en ${sitio}</div>` : ""}`;
+    if (!secreta) d.querySelector("input").value = c[k] || "";
+    cont.appendChild(d);
+  }
+  $("#config").showModal();
+};
+$("#cerrarConfig").onclick = () => $("#config").close();
+$("#guardarConfig").onclick = () => {
+  const c = claves();
+  for (const [k, , , secreta] of CAMPOS) {
+    const v = $("#" + k).value.trim();
+    if (!secreta || v) { if (v) c[k] = v; else delete c[k]; }
+  }
+  localStorage.setItem("claves", JSON.stringify(c));
+  $("#config").close(); pintarModo();
+};
+
+pintarEstilos(); pintarModo();
+</script>
+</body>
+</html>

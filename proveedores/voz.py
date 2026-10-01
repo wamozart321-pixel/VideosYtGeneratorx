@@ -1,17 +1,17 @@
 """Paso 2: narración. ElevenLabs si hay clave; si no, silencio con la duración estimada."""
 import os
-import subprocess
+import re
 
+from . import ejecutar
 from .http import post
-
-VOZ = os.environ.get("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
 
 
 def narrar(texto, destino):
     clave = os.environ.get("ELEVENLABS_API_KEY")
     if clave:
+        voz = os.environ.get("ELEVENLABS_VOICE_ID") or "21m00Tcm4TlvDq8ikWAM"
         audio = post(
-            f"https://api.elevenlabs.io/v1/text-to-speech/{VOZ}",
+            f"https://api.elevenlabs.io/v1/text-to-speech/{voz}",
             {"xi-api-key": clave, "accept": "audio/mpeg"},
             {"text": texto, "model_id": "eleven_multilingual_v2"},
             binario=True,
@@ -20,7 +20,7 @@ def narrar(texto, destino):
             f.write(audio)
     else:
         segundos = max(3.0, len(texto.split()) / 2.5)  # ~150 palabras por minuto
-        subprocess.run(
+        ejecutar.run(
             ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
              "-i", "anullsrc=r=44100:cl=stereo", "-t", f"{segundos:.2f}", destino],
             check=True,
@@ -29,9 +29,7 @@ def narrar(texto, destino):
 
 
 def duracion(archivo):
-    salida = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "csv=p=0", archivo],
-        capture_output=True, text=True, check=True,
-    )
-    return float(salida.stdout.strip())
+    # Se lee de la salida de FFmpeg para no depender de ffprobe.
+    salida = ejecutar.run(["ffmpeg", "-hide_banner", "-i", archivo], capture_output=True, text=True)
+    h, m, s = re.search(r"Duration: (\d+):(\d+):([\d.]+)", salida.stderr).groups()
+    return int(h) * 3600 + int(m) * 60 + float(s)

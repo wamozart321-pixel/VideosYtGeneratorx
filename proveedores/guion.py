@@ -4,8 +4,6 @@ import os
 
 from .http import post
 
-MODELO = os.environ.get("CLAUDE_MODEL", "claude-sonnet-5-5")
-
 INSTRUCCIONES = """Divide este guion en escenas para un video.
 Estilo visual: {estilo}
 Devuelve SOLO un JSON: una lista de objetos con
@@ -24,7 +22,7 @@ def escenas(guion, estilo):
         "https://api.anthropic.com/v1/messages",
         {"x-api-key": clave, "anthropic-version": "2023-06-01"},
         {
-            "model": MODELO,
+            "model": os.environ.get("CLAUDE_MODEL") or "claude-sonnet-5-5",
             "max_tokens": 4000,
             "messages": [{"role": "user", "content": INSTRUCCIONES.format(
                 estilo=estilo["prompt_imagen"], guion=guion)}],
