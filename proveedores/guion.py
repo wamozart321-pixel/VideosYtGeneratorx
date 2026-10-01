@@ -28,8 +28,12 @@ def escenas(guion, estilo):
                 estilo=estilo["prompt_imagen"], guion=guion)}],
         },
     )
-    texto = r["content"][0]["text"]
-    return json.loads(texto[texto.find("["): texto.rfind("]") + 1])
+    # La respuesta puede traer varios bloques (por ejemplo de razonamiento); se usan solo los de texto.
+    texto = "".join(b["text"] for b in r.get("content", []) if b.get("type") == "text")
+    inicio, fin = texto.find("["), texto.rfind("]")
+    if inicio < 0 or fin < inicio:
+        raise ValueError("Claude no devolvió la lista de escenas. Intenta de nuevo.")
+    return json.loads(texto[inicio: fin + 1])
 
 
 def _escenas_demo(guion):
