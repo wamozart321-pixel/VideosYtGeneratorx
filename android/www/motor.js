@@ -41,8 +41,11 @@ async function escenas(guion, estilo, claves) {
     }),
   });
   if (!r.ok) throw new Error(`Claude respondió ${r.status}: ${await r.text()}`);
-  const texto = (await r.json()).content[0].text;
-  return JSON.parse(texto.slice(texto.indexOf("["), texto.lastIndexOf("]") + 1));
+  // La respuesta puede traer varios bloques (por ejemplo de razonamiento); se usan solo los de texto.
+  const texto = ((await r.json()).content || []).filter(b => b.type === "text").map(b => b.text).join("");
+  const inicio = texto.indexOf("["), fin = texto.lastIndexOf("]");
+  if (inicio < 0 || fin < inicio) throw new Error("Claude no devolvió la lista de escenas. Intenta de nuevo.");
+  return JSON.parse(texto.slice(inicio, fin + 1));
 }
 
 // ---------- 2. Voz ----------
