@@ -3,17 +3,21 @@
 //   2. renderizar: voces (+ clips opcionales) → montaje grabado desde un <canvas> con MediaRecorder.
 // Si una escena falla se usa un respaldo para que el video siempre termine.
 
-export const ESTILOS = {
-  cinematico: { nombre: "Cinemático", formato: "16:9", fondo: "#1a1a2e", texto: "#ffffff",
-    fuente: "Georgia, 'Times New Roman', serif", zoom: 0.0010,
-    prompt: "cinematic film still, dramatic lighting, shallow depth of field, 35mm, high detail" },
-  anime: { nombre: "Anime", formato: "16:9", fondo: "#ff7eb6", texto: "#ffffff",
-    fuente: "system-ui, Roboto, sans-serif", zoom: 0.0015,
-    prompt: "anime style, studio ghibli inspired, vibrant colors, soft cel shading" },
-  shorts: { nombre: "Shorts vertical", formato: "9:16", fondo: "#0f9b8e", texto: "#ffff00",
-    fuente: "system-ui, Roboto, sans-serif", zoom: 0.0020,
-    prompt: "bold modern illustration, high contrast, clean background, vertical composition" },
-};
+// Catálogo compartido con la app de escritorio (estilos/estilos.json, se copia al compilar).
+export const ESTILOS = {};
+const FUENTES = { sans: "system-ui, Roboto, sans-serif", serif: "Georgia, 'Times New Roman', serif" };
+
+export async function cargarEstilos() {
+  const lista = await (await fetch("./estilos.json")).json();
+  for (const e of lista) ESTILOS[e.id] = { ...e, fuente: FUENTES[e.fuente], texto: e.color_texto, prompt: e.prompt_imagen };
+  return ESTILOS;
+}
+
+/** El estilo del proyecto con su formato: el formato se elige aparte del estilo. */
+function estiloDe(proyecto) {
+  return { ...(ESTILOS[proyecto.estilo] || Object.values(ESTILOS)[0]), formato: proyecto.formato || "16:9" };
+}
+
 const TAMANOS = { "16:9": [1280, 720], "9:16": [720, 1280] };
 const FPS = 25;
 const LIMITES = { imagen: 4, voz: 3, video: 2 };  // llamadas a la vez por API
@@ -159,7 +163,7 @@ export function componerPrompt(prompt, estilo, biblia = "") {
 }
 
 async function imagenIA(escena, proyecto, claves) {
-  const estilo = ESTILOS[proyecto.estilo];
+  const estilo = estiloDe(proyecto);
   const r = await falPost("fal-ai/flux/schnell", {
     prompt: componerPrompt(escena.prompt_visual, estilo, proyecto.biblia),
     image_size: estilo.formato === "9:16" ? "portrait_16_9" : "landscape_16_9",
@@ -177,7 +181,7 @@ async function cargarImagen(src) {
 
 async function animar(escena, proyecto, claves) {
   const r = await falPost("fal-ai/kling-video/v2.1/standard/image-to-video", {
-    prompt: `${escena.prompt_visual}, ${ESTILOS[proyecto.estilo].prompt}, smooth camera motion`,
+    prompt: `${escena.prompt_visual}, ${estiloDe(proyecto).prompt}, smooth camera motion`,
     image_url: escena.url, duration: "5",
   }, claves.FAL_KEY);
   const v = document.createElement("video");
@@ -203,10 +207,30 @@ function tarjetaDemo(texto, estilo, numero) {
   return c;
 }
 
+// ---------- Vistas previas de los estilos ----------
+
+const ESCENA_DE_MUESTRA = ["sitting at a desk late at night, focused and determined",
+                           "a desk with an open notebook and a warm lamp late at night"];
+
+/** Imagen de muestra de un estilo, reducida para guardarla en el teléfono (data URL JPEG). */
+export async function vistaPrevia(id, claves) {
+  const estilo = ESTILOS[id];
+  const proyecto = { estilo: id, formato: "16:9", biblia: estilo.personaje, semilla: 7 };
+  const escena = { prompt_visual: ESCENA_DE_MUESTRA[estilo.personaje ? 0 : 1] };
+  const url = await conReintentos(() => imagenIA(escena, proyecto, claves), 2);
+  const img = await cargarImagen(await conReintentos(() => urlLocal(url)));
+  const c = document.createElement("canvas");
+  c.width = 384; c.height = 216;
+  const escala = Math.max(c.width / img.width, c.height / img.height);
+  c.getContext("2d").drawImage(img, (c.width - img.width * escala) / 2, (c.height - img.height * escala) / 2,
+                               img.width * escala, img.height * escala);
+  return c.toDataURL("image/jpeg", 0.8);
+}
+
 // ---------- Storyboard (fase 1) ----------
 
 async function crearImagen(proyecto, i, claves, sesion) {
-  const e = proyecto.escenas[i], estilo = ESTILOS[proyecto.estilo];
+  const e = proyecto.escenas[i], estilo = estiloDe(proyecto);
   Object.assign(e, { aviso: null, respaldo_de: null });
   if (!claves.FAL_KEY) {
     e.fuente = tarjetaDemo(e.prompt_visual, estilo, i + 1);
@@ -227,7 +251,7 @@ async function crearImagen(proyecto, i, claves, sesion) {
 
 /** Las escenas sin imagen toman la imagen IA más cercana (preferentemente la anterior). */
 function resolverRespaldos(proyecto) {
-  const { escenas: lista } = proyecto, estilo = ESTILOS[proyecto.estilo];
+  const { escenas: lista } = proyecto, estilo = estiloDe(proyecto);
   for (const [i, e] of lista.entries()) {
     if (e.estado !== "fallida" && e.estado !== "respaldo") continue;
     const candidatas = lista.map((x, j) => [j, x]).filter(([, x]) => x.estado === "ia")
@@ -246,10 +270,10 @@ function resolverRespaldos(proyecto) {
  * Crea las escenas y sus imágenes, sin voz ni montaje, para revisarlas antes de gastar más.
  * Devuelve el proyecto que luego reciben regenerarEscena y renderizar.
  */
-export async function crearStoryboard({ guion, estilo, biblia = "", claves, avisar }) {
+export async function crearStoryboard({ guion, estilo, formato = "16:9", biblia = "", claves, avisar }) {
   const lista = escenas(guion);
   if (!lista.length) throw new Error("El guion no tiene escenas con texto para narrar");
-  const proyecto = { estilo, biblia, semilla: Math.floor(Math.random() * 2 ** 31), avisos: [],
+  const proyecto = { estilo, formato, biblia, semilla: Math.floor(Math.random() * 2 ** 31), avisos: [],
                      escenas: lista.map(e => ({ ...e, estado: "pendiente", version: 0 })) };
   const sesion = nuevaSesion();
   let hechas = 0;
@@ -320,7 +344,7 @@ function formatoGrabacion() {
  * `audio` debe ser un AudioContext creado al tocar el botón (requisito del navegador).
  */
 export async function renderizar({ proyecto, clips, claves, audio, lienzo, avisar }) {
-  const estilo = ESTILOS[proyecto.estilo], lista = proyecto.escenas;
+  const estilo = estiloDe(proyecto), lista = proyecto.escenas;
   const [ancho, alto] = TAMANOS[estilo.formato];
   const sesion = nuevaSesion();
   const tareas = lista.length * (clips && claves.FAL_KEY ? 2 : 1);

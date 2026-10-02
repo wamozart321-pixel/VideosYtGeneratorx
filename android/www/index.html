@@ -26,15 +26,29 @@
                     background: var(--soft); color: var(--text); font: inherit; }
   textarea { min-height: 180px; resize: vertical; }
   .ayuda { font-size: 13px; color: var(--muted); margin-top: 6px; }
-  .estilos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-  .estilo { border: 2px solid var(--line); border-radius: 12px; padding: 8px; background: var(--panel);
-            color: var(--text); font: inherit; text-align: left; }
-  .estilo[aria-pressed="true"] { border-color: var(--accent); }
-  .muestra { height: 52px; border-radius: 8px; margin-bottom: 6px; display: flex; align-items: flex-end;
-             justify-content: center; font-size: 11px; font-weight: 700; padding: 4px; }
-  .muestra.v { width: 30px; margin: 0 auto 6px; }
-  .estilo b { display: block; font-size: 13px; line-height: 1.25; }
-  .estilo small { color: var(--muted); font-size: 11px; }
+  .elegido { display: flex; gap: 12px; align-items: center; width: 100%; text-align: left; padding: 8px; }
+  .elegido .mini { width: 96px; flex: none; }
+  .elegido b { display: block; } .elegido small { color: var(--muted); font-size: 12px; }
+  .mini { aspect-ratio: 16 / 9; border-radius: 8px; overflow: hidden; position: relative; display: flex;
+          align-items: center; justify-content: center; font-weight: 800; font-size: 20px; }
+  .mini img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .tag { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 99px; white-space: nowrap;
+         background: var(--soft); color: var(--muted); }
+  .tag.con { background: rgba(224,167,67,.22); color: #c27c0e; }
+  .segmento { display: flex; gap: 6px; }
+  .segmento button { flex: 1; } .segmento button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+  dialog#selector { width: 100%; max-width: 100%; height: 100%; max-height: 100%; margin: 0; border: 0; border-radius: 0; padding: 0; }
+  #selector .cabeza { padding: calc(12px + env(safe-area-inset-top)) 16px 12px; position: sticky; top: 0;
+                      background: var(--panel); z-index: 1; border-bottom: 1px solid var(--line); }
+  #selector .cabeza h2 { color: var(--text); text-transform: none; letter-spacing: 0; font-size: 20px; margin: 0; }
+  .previa { display: grid; grid-template-columns: minmax(0, 130px) minmax(0, 1fr); gap: 10px; align-items: center; margin-top: 10px; }
+  .previa .ayuda { margin-top: 2px; }
+  .rejilla { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 12px 16px 24px; }
+  .opcion { padding: 0; overflow: hidden; text-align: left; border: 2px solid var(--line); border-radius: 12px; }
+  .opcion .mini { border-radius: 0; }
+  .opcion[aria-pressed="true"] { border-color: var(--accent); }
+  .opcion .pie { padding: 6px 8px 8px; }
+  .opcion .pie b { display: block; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .check { display: flex; gap: 10px; align-items: flex-start; margin-top: 14px; }
   .check input { width: auto; margin-top: 5px; accent-color: var(--accent); }
   button { font: inherit; border-radius: 10px; border: 1px solid var(--line); background: var(--panel);
@@ -95,8 +109,13 @@
     <label class="t" for="biblia">Personajes y estilo fijo <small class="ayuda">(opcional)</small></label>
     <textarea id="biblia" class="corto" placeholder="Ej.: a small blue robot with round eyes, warm sunset palette"></textarea>
     <div class="ayuda">Se agrega igual a todas las imágenes para que el personaje y el estilo no cambien. Mejor en inglés.</div>
-    <label class="t">Estilo</label>
-    <div class="estilos" id="estilos"></div>
+    <label class="t">Estilo visual</label>
+    <button type="button" class="elegido" id="abrirSelector"></button>
+    <label class="t">Formato</label>
+    <div class="segmento" id="formato">
+      <button type="button" data-f="16:9" aria-pressed="true">Horizontal 16:9</button>
+      <button type="button" data-f="9:16" aria-pressed="false">Vertical 9:16</button>
+    </div>
     <label class="check">
       <input type="checkbox" id="clips">
       <span>Animar cada escena con video IA (Kling)<br><small class="ayuda">Más lento y caro. Requiere la clave de fal.ai.</small></span>
@@ -135,6 +154,15 @@
   </section>
 </main>
 
+<dialog id="selector">
+  <div class="cabeza">
+    <div class="fila" style="align-items:center"><h2>Elige el estilo visual</h2><button id="cerrarSelector">Listo</button></div>
+    <div class="previa" id="previa"></div>
+    <div class="acciones" id="accionesVistas" style="align-items:center"></div>
+  </div>
+  <div class="rejilla" id="rejilla"></div>
+</dialog>
+
 <dialog id="config">
   <h2>Configurar IAs</h2>
   <p class="ayuda">Sin claves la app funciona en modo demo. Cada clave activa la IA real de ese paso y se guarda solo en este teléfono.</p>
@@ -146,7 +174,7 @@
 </dialog>
 
 <script type="module">
-import { ESTILOS, escenas, crearStoryboard, regenerarEscena, renderizar } from "./motor.js";
+import { ESTILOS, cargarEstilos, vistaPrevia, escenas, crearStoryboard, regenerarEscena, renderizar } from "./motor.js";
 
 const $ = s => document.querySelector(s);
 const CAMPOS = [
@@ -155,7 +183,7 @@ const CAMPOS = [
   ["ELEVENLABS_VOICE_ID", "ID de voz de ElevenLabs (opcional)", "", false],
 ];
 const Plugins = window.Capacitor?.Plugins || {};
-let estilo = "cinematico", blob = null, proyecto = null, pendientes = 0;
+let estilo = "cinematico", formato = "16:9", blob = null, proyecto = null, pendientes = 0, sugerido = "", creandoVistas = false;
 
 function claves() {
   try { return JSON.parse(localStorage.getItem("claves") || "{}"); } catch { return {}; }
@@ -169,17 +197,81 @@ function pintarModo() {
   if (!c.FAL_KEY) $("#clips").checked = false;
 }
 
-function pintarEstilos() {
-  const cont = $("#estilos"); cont.innerHTML = "";
-  for (const [id, e] of Object.entries(ESTILOS)) {
-    const b = document.createElement("button");
-    b.className = "estilo"; b.setAttribute("aria-pressed", id === estilo);
-    b.innerHTML = `<div class="muestra ${e.formato === "9:16" ? "v" : ""}" style="background:${e.fondo};color:${e.texto}">Aa</div>
-      <b>${e.nombre}</b><small>${e.formato === "9:16" ? "Vertical" : "Horizontal"}</small>`;
-    b.onclick = () => { estilo = id; pintarEstilos(); };
-    cont.appendChild(b);
-  }
+// ---------- estilos ----------
+
+const html = t => String(t ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function vistas() {
+  try { return JSON.parse(localStorage.getItem("vistas") || "{}"); } catch { return {}; }
 }
+function miniatura(id, e) {
+  const v = vistas()[id];
+  const fondo = `linear-gradient(135deg, ${e.fondo}, color-mix(in srgb, ${e.fondo} 55%, black))`;
+  return `<div class="mini" style="background:${fondo};color:${e.texto};font-family:${e.fuente.replace(/"/g, "'")}">Aa
+    ${v ? `<img alt="" src="${v}">` : ""}</div>`;
+}
+const etiqueta = e => e.personaje ? '<span class="tag con">Con personaje</span>' : '<span class="tag">Sin personaje</span>';
+
+function pintarEstilos() {
+  const e = ESTILOS[estilo];
+  $("#abrirSelector").innerHTML = `${miniatura(estilo, e)}
+    <span style="min-width:0"><b>${html(e.nombre)}</b>${etiqueta(e)}<br><small>Toca para ver los ${Object.keys(ESTILOS).length} estilos</small></span>`;
+  if ($("#selector").open) pintarSelector();
+}
+
+function pintarPrevia(id) {
+  const e = ESTILOS[id];
+  $("#previa").innerHTML = `${miniatura(id, e)}<div><b>${html(e.nombre)}</b> ${etiqueta(e)}
+    <div class="ayuda">${e.personaje ? `Personaje sugerido: <i>${html(e.personaje)}</i>`
+                                      : "Escenas sin un personaje fijo: paisajes, objetos y detalles."}</div></div>`;
+}
+
+function pintarSelector() {
+  const total = Object.keys(ESTILOS).length, hechas = Object.keys(vistas()).filter(id => ESTILOS[id]).length;
+  let acciones = "";
+  if (creandoVistas) acciones = `<span class="ayuda">Creando vistas previas (${hechas} de ${total})…</span>`;
+  else if (hechas < total && claves().FAL_KEY)
+    acciones = `<button id="crearVistas">Crear vistas previas</button><span class="ayuda">${total - hechas} imágenes con tu clave de fal.ai (unos centavos, una sola vez).</span>`;
+  else if (hechas < total) acciones = `<span class="ayuda">Con la clave de fal.ai puedes crear una imagen de muestra de cada estilo.</span>`;
+  $("#accionesVistas").innerHTML = acciones;
+  if ($("#crearVistas")) $("#crearVistas").onclick = crearVistas;
+  pintarPrevia(estilo);
+  $("#rejilla").innerHTML = Object.entries(ESTILOS).map(([id, e]) => `
+    <button type="button" class="opcion" data-id="${id}" aria-pressed="${id === estilo}">${miniatura(id, e)}
+      <div class="pie"><b>${html(e.nombre)}</b>${etiqueta(e)}</div></button>`).join("");
+  for (const b of $("#rejilla").children) b.onclick = () => elegirEstilo(b.dataset.id);
+}
+
+async function crearVistas() {
+  creandoVistas = true; pintarSelector();
+  const faltan = Object.keys(ESTILOS).filter(id => !vistas()[id]);
+  let error = "";
+  const trabajar = async () => {
+    for (let id; (id = faltan.shift());) {
+      try {
+        const v = await vistaPrevia(id, claves());
+        try { localStorage.setItem("vistas", JSON.stringify({ ...vistas(), [id]: v })); } catch { /* sin espacio */ }
+      } catch (e) { error = e.message; }
+      pintarEstilos();
+    }
+  };
+  await Promise.all([trabajar(), trabajar(), trabajar(), trabajar()]);  // 4 a la vez, como el límite de imágenes
+  creandoVistas = false; pintarEstilos(); if ($("#selector").open) pintarSelector();
+  if (error) $("#accionesVistas").insertAdjacentHTML("beforeend", `<div class="error" style="width:100%">No se pudieron crear algunas vistas previas: ${html(error)}</div>`);
+}
+
+function elegirEstilo(id) {
+  estilo = id;
+  const personaje = ESTILOS[id].personaje, biblia = $("#biblia");
+  // Rellena el personaje sugerido sin pisar lo que el usuario escribió.
+  if (!biblia.value.trim() || biblia.value === sugerido) { biblia.value = personaje; sugerido = personaje; }
+  pintarEstilos();
+}
+
+$("#abrirSelector").onclick = () => { pintarSelector(); $("#selector").showModal(); };
+$("#cerrarSelector").onclick = () => $("#selector").close();
+for (const b of document.querySelectorAll("#formato button"))
+  b.onclick = () => { formato = b.dataset.f;
+    for (const o of document.querySelectorAll("#formato button")) o.setAttribute("aria-pressed", o === b); };
 
 $("#guion").addEventListener("input", e => {
   const t = e.target.value.trim(), p = t ? t.split(/\s+/).length : 0;
@@ -211,7 +303,7 @@ function insignia(e) {
 function pintarTablero() {
   const cont = $("#tablero"), lista = proyecto.escenas;
   $("#tituloTablero").textContent = `Storyboard · ${lista.length} escena${lista.length === 1 ? "" : "s"}`;
-  cont.classList.toggle("vertical", ESTILOS[proyecto.estilo].formato === "9:16");
+  cont.classList.toggle("vertical", proyecto.formato === "9:16");
   const respaldos = lista.filter(e => e.estado === "respaldo").length;
   pintarAvisos($("#avisos"), [...proyecto.avisos,
     ...(respaldos ? [`${respaldos} escena(s) usan una imagen de respaldo. Puedes regenerarlas antes de crear el video.`] : [])]);
@@ -261,7 +353,7 @@ $("#generar").onclick = async () => {
   $("#storyboard").classList.add("oculto"); $("#resultado").classList.add("oculto");
   progreso("Creando las imágenes…", false);
   try {
-    proyecto = await crearStoryboard({ guion, estilo, biblia: $("#biblia").value, claves: claves(), avisar });
+    proyecto = await crearStoryboard({ guion, estilo, formato, biblia: $("#biblia").value, claves: claves(), avisar });
     pintarTablero();
     $("#progreso").classList.add("oculto");
     verTablero();
@@ -359,7 +451,8 @@ $("#guardarConfig").onclick = () => {
   $("#config").close(); pintarModo();
 };
 
-pintarEstilos(); pintarModo();
+pintarModo();
+cargarEstilos().then(pintarEstilos);
 </script>
 </body>
 </html>

@@ -32,15 +32,30 @@
              border: 1px solid var(--line); background: var(--soft); color: var(--text); font: inherit; }
   textarea:focus, input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   .ayuda { font-size: 13px; color: var(--muted); margin-top: 6px; }
-  .estilos { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
-  .estilo { border: 2px solid var(--line); border-radius: 12px; padding: 10px; cursor: pointer; background: var(--panel);
-            text-align: left; color: var(--text); font: inherit; }
-  .estilo[aria-pressed="true"] { border-color: var(--accent); }
-  .muestra { border-radius: 8px; display: flex; align-items: flex-end; justify-content: center; padding: 6px;
-             font-size: 11px; font-weight: 700; margin-bottom: 8px; height: 70px; }
-  .muestra.v { width: 40px; margin-left: auto; margin-right: auto; }
-  .estilo b { display: block; font-size: 14px; }
-  .estilo small { color: var(--muted); }
+  .elegido { display: flex; gap: 12px; align-items: center; width: 100%; text-align: left; padding: 8px; }
+  .elegido .mini { width: 96px; flex: none; }
+  .elegido b { display: block; } .elegido small { color: var(--muted); }
+  .mini { aspect-ratio: 16 / 9; border-radius: 8px; overflow: hidden; position: relative; display: flex;
+          align-items: center; justify-content: center; font-weight: 800; font-size: 20px; }
+  .mini img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .tag { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 99px; white-space: nowrap;
+         background: var(--soft); color: var(--muted); }
+  .tag.con { background: color-mix(in srgb, var(--warn) 22%, transparent); color: var(--warn); }
+  .segmento { display: flex; gap: 6px; }
+  .segmento button { flex: 1; } .segmento button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+  dialog#selector { max-width: 920px; width: calc(100% - 32px); max-height: calc(100vh - 32px); padding: 0; }
+  #selector .cabeza { padding: 20px 20px 12px; position: sticky; top: 0; background: var(--panel); z-index: 1;
+                      border-bottom: 1px solid var(--line); }
+  #selector .cabeza h2 { color: var(--text); text-transform: none; letter-spacing: 0; font-size: 22px; margin: 0; }
+  .previa { display: grid; grid-template-columns: minmax(0, 240px) minmax(0, 1fr); gap: 14px; align-items: center; margin-top: 12px; }
+  .previa .mini { font-size: 34px; }
+  @media (max-width: 600px) { .previa { grid-template-columns: minmax(0, 1fr); } }
+  .rejilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; padding: 16px 20px 20px; }
+  .opcion { padding: 0; overflow: hidden; text-align: left; border: 2px solid var(--line); border-radius: 12px; }
+  .opcion .mini { border-radius: 0; }
+  .opcion[aria-pressed="true"] { border-color: var(--accent); }
+  .opcion .pie { display: flex; gap: 6px; align-items: center; justify-content: space-between; padding: 8px; }
+  .opcion .pie b { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
   .check { display: flex; gap: 10px; align-items: flex-start; margin-top: 16px; }
   .check input { margin-top: 4px; accent-color: var(--accent); }
   button { font: inherit; border-radius: 10px; border: 1px solid var(--line); background: var(--panel);
@@ -123,8 +138,14 @@
       <textarea id="biblia" class="corta" placeholder="Ej.: a young woman with short red hair, green jacket; warm orange and teal palette; soft morning light"></textarea>
       <div class="ayuda">Se agrega igual a todas las imágenes para que el personaje y el estilo no cambien. Mejor en inglés.</div>
 
-      <label class="t">Estilo</label>
-      <div class="estilos" id="estilos"></div>
+      <label class="t">Estilo visual</label>
+      <button type="button" class="elegido" id="abrirSelector"></button>
+
+      <label class="t">Formato</label>
+      <div class="segmento" id="formato">
+        <button type="button" data-f="16:9" aria-pressed="true">Horizontal 16:9</button>
+        <button type="button" data-f="9:16" aria-pressed="false">Vertical 9:16</button>
+      </div>
 
       <label class="check">
         <input type="checkbox" id="clips">
@@ -147,6 +168,17 @@
     <div class="vacio">Pega un guion y pulsa <b>Crear storyboard</b>.</div>
   </section>
 </main>
+
+<dialog id="selector">
+  <div class="cabeza">
+    <div class="fila" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <h2>Elige el estilo visual</h2><button id="cerrarSelector">Listo</button>
+    </div>
+    <div class="previa" id="previa"></div>
+    <div class="acciones" id="accionesVistas"></div>
+  </div>
+  <div class="rejilla" id="rejilla"></div>
+</dialog>
 
 <dialog id="config">
   <h2>Configurar IAs</h2>
@@ -191,19 +223,74 @@ async function cargarEstado() {
   pintarEstilos();
 }
 
+// ---------- estilos ----------
+
+function miniatura(id, e) {
+  const v = estado.vistas[id];
+  const fondo = `linear-gradient(135deg, ${e.fondo}, color-mix(in srgb, ${e.fondo} 55%, black))`;
+  const letra = e.fuente === "serif" ? "Georgia, serif" : "inherit";
+  return `<div class="mini" style="background:${fondo};color:${e.color_texto.replace("0x", "#")};font-family:${letra}">Aa
+    ${v ? `<img alt="" loading="lazy" src="/vistas/${id}.png?v=${v}">` : ""}</div>`;
+}
+const etiqueta = e => e.personaje ? '<span class="tag con">Con personaje</span>' : '<span class="tag">Sin personaje</span>';
+
 function pintarEstilos() {
-  const cont = $("#estilos"); cont.innerHTML = "";
-  for (const [id, e] of Object.entries(estado.estilos)) {
-    if (!estiloElegido) estiloElegido = id;
-    const b = document.createElement("button");
-    b.type = "button"; b.className = "estilo"; b.setAttribute("aria-pressed", id === estiloElegido);
-    const color = "#" + e.fondo_demo.replace("0x", "");
-    b.innerHTML = `<div class="muestra ${e.formato === "9:16" ? "v" : ""}" style="background:${color};color:${e.color_texto}">Aa</div>
-                   <b>${html(e.nombre)}</b><small>${e.formato === "9:16" ? "Vertical 9:16" : "Horizontal 16:9"}</small>`;
-    b.onclick = () => { estiloElegido = id; pintarEstilos(); };
-    cont.appendChild(b);
+  if (!estado.estilos[estiloElegido]) estiloElegido = Object.keys(estado.estilos)[0];
+  const e = estado.estilos[estiloElegido];
+  $("#abrirSelector").innerHTML = `${miniatura(estiloElegido, e)}
+    <span style="min-width:0"><b>${html(e.nombre)}</b>${etiqueta(e)}<br><small>Toca para ver los ${Object.keys(estado.estilos).length} estilos</small></span>`;
+  if ($("#selector").open) pintarSelector();
+}
+
+function pintarPrevia(id) {
+  const e = estado.estilos[id];
+  $("#previa").innerHTML = `${miniatura(id, e)}<div><b style="font-size:17px">${html(e.nombre)}</b> ${etiqueta(e)}
+    <div class="ayuda">${e.personaje ? `Personaje sugerido: <i>${html(e.personaje)}</i>. Lo puedes cambiar en "Personajes y estilo fijo".`
+                                      : "Escenas sin un personaje fijo: paisajes, objetos y detalles."}</div></div>`;
+}
+
+function pintarSelector() {
+  const total = Object.keys(estado.estilos).length, hechas = Object.keys(estado.vistas).length, ve = estado.vistas_estado;
+  let acciones = "";
+  if (ve.generando) acciones = `<span class="ayuda">Creando vistas previas (${hechas} de ${total})…</span>`;
+  else if (hechas < total && estado.modo.imagen)
+    acciones = `<button id="crearVistas">Crear vistas previas</button><span class="ayuda">${total - hechas} imágenes con tu clave de fal.ai (unos centavos, una sola vez).</span>`;
+  else if (hechas < total) acciones = `<span class="ayuda">Con la clave de fal.ai puedes crear una imagen de muestra de cada estilo.</span>`;
+  if (ve.error) acciones += `<div class="error" style="width:100%">${html(ve.error)}</div>`;
+  $("#accionesVistas").innerHTML = acciones;
+  const crear = $("#crearVistas");
+  if (crear) crear.onclick = async () => {
+    crear.disabled = true;
+    try { await enviar("/api/vistas"); } catch (err) { alert(err.message); }
+    await cargarEstado();
+  };
+  pintarPrevia(estiloElegido);
+  $("#rejilla").innerHTML = Object.entries(estado.estilos).map(([id, e]) => `
+    <button type="button" class="opcion" data-id="${id}" aria-pressed="${id === estiloElegido}">${miniatura(id, e)}
+      <div class="pie"><b>${html(e.nombre)}</b>${e.personaje ? '<span class="tag con">Con personaje</span>' : '<span class="tag">Sin personaje</span>'}</div>
+    </button>`).join("");
+  for (const b of $("#rejilla").children) {
+    b.onmouseenter = b.onfocus = () => pintarPrevia(b.dataset.id);
+    b.onmouseleave = () => pintarPrevia(estiloElegido);
+    b.onclick = () => elegirEstilo(b.dataset.id);
   }
 }
+
+let sugerido = "";
+function elegirEstilo(id) {
+  estiloElegido = id;
+  const personaje = estado.estilos[id].personaje, biblia = $("#biblia");
+  // Rellena el personaje sugerido sin pisar lo que el usuario escribió.
+  if (!biblia.value.trim() || biblia.value === sugerido) { biblia.value = personaje; sugerido = personaje; }
+  pintarEstilos();
+}
+
+$("#abrirSelector").onclick = () => { pintarSelector(); $("#selector").showModal(); };
+$("#cerrarSelector").onclick = () => $("#selector").close();
+let formato = "16:9";
+for (const b of document.querySelectorAll("#formato button"))
+  b.onclick = () => { formato = b.dataset.f;
+    for (const o of document.querySelectorAll("#formato button")) o.setAttribute("aria-pressed", o === b); };
 
 $("#guion").addEventListener("input", e => {
   const t = e.target.value.trim(), palabras = t ? t.split(/\s+/).length : 0;
@@ -215,7 +302,7 @@ $("#crear").onclick = async () => {
   $("#errorForm").textContent = "";
   try {
     const p = await enviar("/api/proyectos", {guion: $("#guion").value, biblia: $("#biblia").value,
-                                              estilo: estiloElegido, clips: $("#clips").checked});
+                                              estilo: estiloElegido, formato, clips: $("#clips").checked});
     abrir(p.id);
   } catch (e) { $("#errorForm").textContent = e.message; }
 };
@@ -261,7 +348,7 @@ function insignia(e) {
 }
 
 function pintarTablero(p) {
-  const vertical = estado.estilos[p.estilo]?.formato === "9:16";
+  const vertical = p.formato === "9:16";
   const respaldos = p.escenas.filter(e => e.estado === "respaldo").length;
   $("#espacio").innerHTML = `<h2>Storyboard · ${p.escenas.length} escenas</h2>
     ${avisosHtml(p, respaldos ? [`${respaldos} escena(s) usan una imagen de respaldo. Puedes regenerarlas antes de crear el video.`] : [])}
@@ -342,6 +429,7 @@ async function cargarLista() {
   }
 }
 setInterval(actualizar, 1500);
+setInterval(() => { if (estado?.vistas_estado?.generando) cargarEstado(); }, 2000);
 
 // ---------- configuración de claves ----------
 $("#abrirConfig").onclick = () => {

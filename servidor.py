@@ -15,6 +15,7 @@ import time
 import traceback
 import uuid
 import webbrowser
+from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import videosyt
@@ -23,6 +24,7 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 DATOS = os.environ.get("VIDEOSYT_DATOS") or AQUI  # donde se guardan proyectos, videos y claves
 SALIDA = os.path.join(DATOS, "salida")
 PROYECTOS = os.path.join(DATOS, "proyectos")
+VISTAS = os.path.join(DATOS, "vistas")  # imágenes de muestra de cada estilo
 CONFIG = os.path.join(DATOS, "config.json")
 PUERTO = int(os.environ.get("PORT", "8000"))
 OPCIONALES = ["ELEVENLABS_VOICE_ID"]
@@ -30,6 +32,7 @@ OCUPADO = {"en cola", "storyboard", "render"}
 
 proyectos = {}
 cola = queue.Queue()
+vistas = {"generando": False, "error": ""}
 
 
 # ---------- configuración (claves de API) ----------
@@ -109,6 +112,27 @@ def regenerar(p, i):
         p["escenas"][i]["regenerando"] = False
 
 
+def vistas_listas():
+    return {id_: int(os.path.getmtime(os.path.join(VISTAS, f"{id_}.png")))
+            for id_ in videosyt.estilos() if os.path.exists(os.path.join(VISTAS, f"{id_}.png"))}
+
+
+def crear_vistas():
+    """Genera en segundo plano las muestras de los estilos que aún no tienen."""
+    faltan = [id_ for id_ in videosyt.estilos() if id_ not in vistas_listas()]
+    vistas["error"] = ""
+    try:
+        with ThreadPoolExecutor(videosyt.LIMITES["imagen"]) as grupo:
+            for futuro in [grupo.submit(videosyt.vista_previa, id_, os.path.join(VISTAS, f"{id_}.png"))
+                           for id_ in faltan]:
+                try:
+                    futuro.result()
+                except Exception as e:  # noqa: BLE001  (se muestra en la interfaz)
+                    vistas["error"] = f"No se pudieron crear algunas vistas previas: {e}"
+    finally:
+        vistas["generando"] = False
+
+
 def resumen(p):
     return {"id": p["id"], "titulo": p["titulo"], "estilo": p["estilo"], "fase": p.get("fase"),
             "progreso": p.get("progreso", 0), "mensaje": p.get("mensaje", ""), "creado": p["creado"]}
@@ -116,7 +140,7 @@ def resumen(p):
 
 def detalle(p):
     datos = resumen(p)
-    datos.update(biblia=p["biblia"], clips=p["clips"], avisos=p["avisos"], tiene_video=bool(p.get("video")),
+    datos.update(formato=videosyt.estilo_de(p)["formato"], biblia=p["biblia"], clips=p["clips"], avisos=p["avisos"], tiene_video=bool(p.get("video")),
                  escenas=[{"narracion": e["narracion"], "prompt_visual": e["prompt_visual"],
                            "estado": e["estado_imagen"], "respaldo_de": e.get("respaldo_de"),
                            "aviso": e.get("aviso"), "regenerando": e.get("regenerando", False),
@@ -163,7 +187,8 @@ class Manejador(BaseHTTPRequestHandler):
         if ruta == "/api/estado":
             claves = {k: bool(os.environ.get(k)) for k in videosyt.CLAVES.values()}
             claves.update({k: os.environ.get(k, "") for k in OPCIONALES})
-            return self._json({"estilos": videosyt.estilos(), "modo": videosyt.modo(), "claves": claves})
+            return self._json({"estilos": videosyt.estilos(), "modo": videosyt.modo(), "claves": claves,
+                               "vistas": vistas_listas(), "vistas_estado": vistas})
         if ruta == "/api/proyectos":
             lista = sorted(proyectos.values(), key=lambda p: p["creado"], reverse=True)
             return self._json([resumen(p) for p in lista])
@@ -176,6 +201,9 @@ class Manejador(BaseHTTPRequestHandler):
             archivo = os.path.join(proyectos[m.group(1)]["carpeta"], m.group(2))
             if os.path.exists(archivo):
                 return self._archivo(archivo, "image/png")
+        m = re.fullmatch(r"/vistas/([a-z0-9-]+)\.png", ruta)
+        if m and os.path.exists(os.path.join(VISTAS, m.group(1) + ".png")):
+            return self._archivo(os.path.join(VISTAS, m.group(1) + ".png"), "image/png")
         m = re.fullmatch(r"/videos/([a-f0-9]+)\.mp4", ruta)
         if m and proyectos.get(m.group(1), {}).get("video") and os.path.exists(proyectos[m.group(1)]["video"]):
             return self._archivo(proyectos[m.group(1)]["video"], "video/mp4")
@@ -206,6 +234,13 @@ class Manejador(BaseHTTPRequestHandler):
                 datos = self._leer()
                 videosyt.editar_escena(p, i, datos.get("narracion"), datos.get("prompt_visual"))
             return self._json(detalle(p))
+        if ruta == "/api/vistas":
+            if not os.environ.get("FAL_KEY"):
+                return self._json({"error": "Configura la clave de fal.ai para crear las vistas previas"}, 400)
+            if not vistas["generando"]:
+                vistas["generando"] = True
+                threading.Thread(target=crear_vistas, daemon=True).start()
+            return self._json(vistas)
         if ruta == "/api/abrir-carpeta":
             os.makedirs(SALIDA, exist_ok=True)
             abrir_carpeta(SALIDA)
@@ -221,10 +256,13 @@ class Manejador(BaseHTTPRequestHandler):
             return self._json({"error": "El guion está vacío"}, 400)
         if datos.get("estilo") not in videosyt.estilos():
             return self._json({"error": "Estilo desconocido"}, 400)
+        formato = datos.get("formato") or "16:9"
+        if formato not in videosyt.FORMATOS:
+            return self._json({"error": "Formato desconocido"}, 400)
         id_ = uuid.uuid4().hex[:12]
         try:
             p = videosyt.nuevo_proyecto(texto, datos["estilo"], os.path.join(PROYECTOS, id_),
-                                        datos.get("biblia") or "", datos.get("clips"))
+                                        datos.get("biblia") or "", datos.get("clips"), formato)
         except ValueError as e:
             return self._json({"error": str(e)}, 400)
         primera = next(e["narracion"] for e in p["escenas"])
@@ -269,6 +307,7 @@ def iniciar(puerto=PUERTO):
     """Arranca el servidor en segundo plano y devuelve su dirección."""
     os.makedirs(SALIDA, exist_ok=True)
     os.makedirs(PROYECTOS, exist_ok=True)
+    os.makedirs(VISTAS, exist_ok=True)
     cargar_config()
     cargar_proyectos()
     threading.Thread(target=trabajador, daemon=True).start()

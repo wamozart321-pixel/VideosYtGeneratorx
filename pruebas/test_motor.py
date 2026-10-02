@@ -126,3 +126,29 @@ class Motor(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Estilos(unittest.TestCase):
+    def test_catalogo_completo(self):
+        catalogo = videosyt.estilos()
+        self.assertEqual(len(catalogo), 20)
+        for e in catalogo.values():
+            self.assertTrue(os.path.exists(os.path.join(videosyt.AQUI, e["fuente"])), e["id"])
+            self.assertRegex(e["fondo"], r"^#[0-9a-f]{6}$")
+        self.assertTrue(any(e["personaje"] for e in catalogo.values()))
+        self.assertTrue(any(not e["personaje"] for e in catalogo.values()))
+
+    def test_formato_aparte_y_proyectos_antiguos(self):
+        self.assertEqual(videosyt.estilo_de({"estilo": "anime", "formato": "9:16"})["formato"], "9:16")
+        antiguo = videosyt.estilo_de({"estilo": "shorts"})  # "shorts" era un estilo vertical
+        self.assertEqual((antiguo["id"], antiguo["formato"]), ("cinematico", "9:16"))
+
+    def test_vista_previa_usa_el_personaje_del_estilo(self):
+        enviado = {}
+        def post(url, cabeceras, cuerpo):
+            enviado.update(cuerpo)
+            return {"images": [{"url": "https://x"}]}
+        with mock.patch.dict(os.environ, {"FAL_KEY": "x"}), mock.patch.object(imagen, "post", post), \
+                mock.patch.object(imagen, "descargar", lambda *a: None):
+            videosyt.vista_previa("anime", "/tmp/no-importa.png")
+        self.assertTrue(enviado["prompt"].startswith(videosyt.estilos()["anime"]["personaje"]))

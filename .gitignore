@@ -9,3 +9,5 @@ node_modules/
 android/android/
 android/package-lock.json
 proyectos/
+vistas/
+android/www/estilos.json

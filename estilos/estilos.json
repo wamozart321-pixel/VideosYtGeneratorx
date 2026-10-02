@@ -1,0 +1,202 @@
+[
+ {
+  "id": "cinematico",
+  "nombre": "Cine motivacional",
+  "personaje": "",
+  "prompt_imagen": "cinematic film still, dramatic lighting, golden hour, shallow depth of field, 35mm, high detail",
+  "fondo": "#1a1a2e",
+  "color_texto": "#ffffff",
+  "fuente": "serif",
+  "zoom": 0.001
+ },
+ {
+  "id": "realismo",
+  "nombre": "Realismo",
+  "personaje": "",
+  "prompt_imagen": "photorealistic photo, natural light, 50mm lens, high detail, moody atmosphere",
+  "fondo": "#2b2620",
+  "color_texto": "#ffffff",
+  "fuente": "sans",
+  "zoom": 0.001
+ },
+ {
+  "id": "realismo-personaje",
+  "nombre": "Realismo con personaje",
+  "personaje": "a confident latino man in his late twenties, short dark hair, white shirt",
+  "prompt_imagen": "photorealistic portrait photography, cinematic lighting, warm moody tones, high detail",
+  "fondo": "#3a2418",
+  "color_texto": "#ffffff",
+  "fuente": "sans",
+  "zoom": 0.001
+ },
+ {
+  "id": "anime",
+  "nombre": "Anime Studio",
+  "personaje": "a young woman with long brown hair and a green jacket",
+  "prompt_imagen": "anime style, studio ghibli inspired, vibrant colors, soft cel shading, warm interior light",
+  "fondo": "#ff7eb6",
+  "color_texto": "#ffffff",
+  "fuente": "sans",
+  "zoom": 0.0015
+ },
+ {
+  "id": "3d-relatos",
+  "nombre": "3D Relatos",
+  "personaje": "a teenage boy with messy brown hair, big expressive eyes",
+  "prompt_imagen": "3d animated movie style, pixar inspired, soft global illumination, warm cozy lighting",
+  "fondo": "#d98b3a",
+  "color_texto": "#ffffff",
+  "fuente": "sans",
+  "zoom": 0.0015
+ },
+ {
+  "id": "2d-personaje",
+  "nombre": "2D Personaje",
+  "personaje": "a young man with short black hair, simple flat cartoon design",
+  "prompt_imagen": "2d flat cartoon illustration, bold clean outlines, expressive character, warm colors",
+  "fondo": "#f2a541",
+  "color_texto": "#ffffff",
+  "fuente": "sans",
+  "zoom": 0.0015
+ },
+ {
+  "id": "comic",
+  "nombre": "Cómic superhéroe",
+  "personaje": "a muscular masked hero in a black and yellow suit",
+  "prompt_imagen": "american comic book art, bold ink lines, halftone shading, dynamic pose, dramatic lighting",
+  "fondo": "#1c1c1c",
+  "color_texto": "#ffd400",
+  "fuente": "sans",
+  "zoom": 0.002
+ },
+ {
+  "id": "acero",
+  "nombre": "Acero",
+  "personaje": "a muscular man in dark steel armor",
+  "prompt_imagen": "dark metallic aesthetic, steel textures, cold blue rim light, gritty high contrast, cinematic",
+  "fondo": "#1f2933",
+  "color_texto": "#e6eef5",
+  "fuente": "sans",
+  "zoom": 0.0012
+ },
+ {
+  "id": "lapiz",
+  "nombre": "Lápiz dramático",
+  "personaje": "a determined young man with short hair",
+  "prompt_imagen": "dramatic graphite pencil drawing, cross hatching, strong shadows, black and white sketch",
+  "fondo": "#d9d9d9",
+  "color_texto": "#ffffff",
+  "fuente": "serif",
+  "zoom": 0.001
+ },
+ {
+  "id": "stickman",
+  "nombre": "Stickman",
+  "personaje": "a simple stick figure with a round head",
+  "prompt_imagen": "minimalist stick figure drawing, black ink on white paper, simple doodle, clean lines",
+  "fondo": "#f4f4f4",
+  "color_texto": "#ffff00",
+  "fuente": "sans",
+  "zoom": 0.002
+ },
+ {
+  "id": "stickman-color",
+  "nombre": "Stickman expresivo",
+  "personaje": "a round orange-headed doodle character with a small body",
+  "prompt_imagen": "black and white pencil sketch scene with one bright orange character, hand drawn doodle style",
+  "fondo": "#ff8a1f",
+  "color_texto": "#ffffff",
+  "fuente": "sans",
+  "zoom": 0.002
+ },
+ {
+  "id": "maniqui",
+  "nombre": "Muñeco de madera",
+  "personaje": "a small wooden artist mannequin figure",
+  "prompt_imagen": "vintage storybook illustration, wooden mannequin, aged paper texture, sepia warm tones",
+  "fondo": "#a07850",
+  "color_texto": "#ffffff",
+  "fuente": "serif",
+  "zoom": 0.0012
+ },
+ {
+  "id": "taoismo",
+  "nombre": "Taoísmo",
+  "personaje": "a calm taoist monk with a hair bun and grey robe",
+  "prompt_imagen": "traditional chinese painting, ink wash, soft beige paper, calm zen atmosphere",
+  "fondo": "#cdbb98",
+  "color_texto": "#ffffff",
+  "fuente": "serif",
+  "zoom": 0.0008
+ },
+ {
+  "id": "abstracto",
+  "nombre": "Abstracto",
+  "personaje": "",
+  "prompt_imagen": "abstract dark art, red neon light trails, minimal geometric shapes, deep shadows",
+  "fondo": "#3b0a0a",
+  "color_texto": "#ffffff",
+  "fuente": "sans",
+  "zoom": 0.0015
+ },
+ {
+  "id": "oleo",
+  "nombre": "Óleo clásico",
+  "personaje": "",
+  "prompt_imagen": "classical oil painting, rembrandt lighting, chiaroscuro, rich brush textures",
+  "fondo": "#4a3420",
+  "color_texto": "#ffffff",
+  "fuente": "serif",
+  "zoom": 0.0008
+ },
+ {
+  "id": "acuarela",
+  "nombre": "Acuarela",
+  "personaje": "",
+  "prompt_imagen": "soft watercolor painting, muted earthy tones, delicate washes, paper texture",
+  "fondo": "#8c7b6b",
+  "color_texto": "#ffffff",
+  "fuente": "serif",
+  "zoom": 0.0008
+ },
+ {
+  "id": "fantasia",
+  "nombre": "Fantasía cósmica",
+  "personaje": "",
+  "prompt_imagen": "cosmic fantasy art, nebula sky, glowing purple and blue lights, magical atmosphere",
+  "fondo": "#2a1a5e",
+  "color_texto": "#ffffff",
+  "fuente": "sans",
+  "zoom": 0.0012
+ },
+ {
+  "id": "naturaleza",
+  "nombre": "Detalles cercanos",
+  "personaje": "",
+  "prompt_imagen": "macro close up photography, warm golden light, shallow depth of field, rich textures",
+  "fondo": "#6b4a1e",
+  "color_texto": "#ffffff",
+  "fuente": "sans",
+  "zoom": 0.001
+ },
+ {
+  "id": "vector",
+  "nombre": "Vector corporativo",
+  "personaje": "",
+  "prompt_imagen": "flat vector illustration, corporate style, clean geometric shapes, blue palette",
+  "fondo": "#1f5fbf",
+  "color_texto": "#ffffff",
+  "fuente": "sans",
+  "zoom": 0.0015
+ },
+ {
+  "id": "tierno",
+  "nombre": "Ilustración tierna",
+  "personaje": "",
+  "prompt_imagen": "cute hand drawn illustration, pastel colors, soft crayon texture, cozy simple scenes",
+  "fondo": "#f2d78c",
+  "color_texto": "#ffffff",
+  "fuente": "sans",
+  "zoom": 0.0015
+ }
+]
