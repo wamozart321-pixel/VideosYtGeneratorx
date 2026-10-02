@@ -29,6 +29,7 @@ VISTAS = os.path.join(DATOS, "vistas")  # imágenes de muestra de cada estilo
 CONFIG = os.path.join(DATOS, "config.json")
 PUERTO = int(os.environ.get("PORT", "8000"))
 OPCIONALES = ["ELEVENLABS_VOICE_ID"]
+SECRETAS = [*videosyt.CLAVES.values(), "OPENAI_API_KEY"]  # la interfaz solo sabe si están puestas
 OCUPADO = {"en cola", "storyboard", "render"}
 
 proyectos = {}
@@ -51,7 +52,7 @@ def guardar_config(nuevas):
     if os.path.exists(CONFIG):
         with open(CONFIG) as f:
             actual = json.load(f)
-    for k in [*videosyt.CLAVES.values(), *OPCIONALES]:
+    for k in [*SECRETAS, *OPCIONALES]:
         if k in nuevas:
             valor = nuevas[k].strip()
             actual[k] = valor
@@ -186,7 +187,7 @@ class Manejador(BaseHTTPRequestHandler):
         if ruta == "/":
             return self._archivo(os.path.join(AQUI, "web", "index.html"), "text/html; charset=utf-8")
         if ruta == "/api/estado":
-            claves = {k: bool(os.environ.get(k)) for k in videosyt.CLAVES.values()}
+            claves = {k: bool(os.environ.get(k)) for k in SECRETAS}
             claves.update({k: os.environ.get(k, "") for k in OPCIONALES})
             return self._json({"estilos": videosyt.estilos(), "modo": videosyt.modo(), "claves": claves,
                                "vistas": vistas_listas(), "vistas_estado": vistas,

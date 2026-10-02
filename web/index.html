@@ -166,6 +166,7 @@
         <button type="button" data-v="rapida" aria-pressed="false">Rápida</button>
         <button type="button" data-v="buena" aria-pressed="true">Buena</button>
         <button type="button" data-v="maxima" aria-pressed="false">Máxima</button>
+        <button type="button" data-v="openai" aria-pressed="false">ChatGPT</button>
       </div>
       <div class="ayuda" id="ayudaCalidad"></div>
 
@@ -223,6 +224,7 @@ const $ = s => document.querySelector(s);
 const CAMPOS = [
   ["ELEVENLABS_API_KEY", "ElevenLabs (voz)", "elevenlabs.io", true],
   ["FAL_KEY", "fal.ai (imágenes y video)", "fal.ai", true],
+  ["OPENAI_API_KEY", "OpenAI (imágenes de ChatGPT, opcional; se paga aparte de Plus)", "platform.openai.com", true],
   ["ELEVENLABS_VOICE_ID", "ID de voz de ElevenLabs (opcional)", "", false],
 ];
 const OCUPADO = ["en cola", "storyboard", "render"];
@@ -245,8 +247,8 @@ async function cargarEstado() {
   $("#modo").textContent = activos.length
     ? "IA activa: " + activos.map(k => nombres[k]).join(", ") + (activos.length < 2 ? " · resto en demo" : "")
     : "Modo demo (sin claves de IA)";
-  $("#clips").disabled = !m.imagen;
-  if (!m.imagen) $("#clips").checked = false;
+  $("#clips").disabled = !estado.claves.FAL_KEY;  // los clips son de Kling en fal.ai
+  if (!estado.claves.FAL_KEY) $("#clips").checked = false;
   pintarEstilos();
   pintarActualizacion();
 }
@@ -333,6 +335,8 @@ const CALIDADES = {
   rapida: "Flux schnell: la más barata (~$0.003 por imagen) pero con más errores.",
   buena: "Flux dev: mucho mejor detalle y menos letras raras (~$0.025 por imagen).",
   maxima: "Flux 1.1 pro: la mejor calidad (~$0.04 por imagen).",
+  openai: "OpenAI, el de ChatGPT: personajes más parecidos entre escenas (~$0.04–0.05 por imagen). " +
+          "Usa tu clave de API de OpenAI; si falla y tienes fal.ai, se hace con Flux.",
 };
 function segmento(id, alElegir) {
   for (const b of document.querySelectorAll(`#${id} button`))

@@ -12,7 +12,7 @@ import urllib.error
 from unittest import mock
 
 import videosyt
-from proveedores import director, guion, imagen, reintentos, voz
+from proveedores import clip_video, director, guion, imagen, openai_imagen, reintentos, voz
 
 reintentos.time.sleep = lambda s: None  # sin esperas reales entre reintentos
 
@@ -167,6 +167,72 @@ class Motor(unittest.TestCase):
         e = p["escenas"][1]
         self.assertEqual(e["estado_imagen"], "respaldo")
         self.assertIn("filtro de contenido", e["aviso"])
+
+    def openai(self, responder):
+        """Simula la API de imágenes de OpenAI con la imagen de prueba en base64."""
+        import base64
+        with open(self.png, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode()
+        pedidos = []
+
+        def post(url, cabeceras, cuerpo, timeout=None):
+            pedidos.append(dict(cuerpo))
+            error = responder(cuerpo, len(pedidos))
+            if error:
+                raise error
+            return {"data": [{"b64_json": b64}]}
+
+        openai_imagen._modelo_que_funciona = None
+        return pedidos, mock.patch.object(openai_imagen, "post", post)
+
+    def test_imagenes_con_openai_y_clip_con_el_archivo(self):
+        pedidos, simulado = self.openai(lambda cuerpo, n: None)
+        p = self.proyecto(biblia="a red robot", calidad="openai", clips=True)
+        animados = []
+
+        def animar(url, *_):
+            animados.append(url)
+            raise ValueError("sin red en las pruebas")  # el video sigue con la imagen
+        with mock.patch.dict(os.environ, {"OPENAI_API_KEY": "sk-x"}), simulado, \
+                mock.patch.object(imagen, "post", side_effect=AssertionError("no debe usar fal")):
+            videosyt.storyboard(p)
+            with mock.patch.object(clip_video, "animar", animar):
+                videosyt.renderizar(p, os.path.join(self.dir, "video.mp4"))
+        self.assertEqual(len(pedidos), 4)
+        self.assertEqual({c["size"] for c in pedidos}, {"1536x1024"})
+        self.assertTrue(all("red robot" in c["prompt"] for c in pedidos))
+        self.assertEqual({e["estado_imagen"] for e in p["escenas"]}, {"ia"})
+        self.assertTrue(animados and all(u.startswith("data:image/png;base64,") for u in animados))
+
+    def test_openai_prueba_el_siguiente_modelo_y_suaviza_si_lo_rechaza(self):
+        def responder(cuerpo, n):
+            if cuerpo["model"] == openai_imagen.MODELOS[0]:
+                return error_http(404, b'{"error": {"code": "model_not_found", "message": "no model"}}')
+            if n == 2:
+                return error_http(400, b'{"error": {"code": "moderation_blocked", "message": "safety"}}')
+        pedidos, simulado = self.openai(responder)
+        p = self.proyecto(calidad="openai")
+        with mock.patch.dict(os.environ, {"OPENAI_API_KEY": "sk-x"}), simulado:
+            videosyt.regenerar_escena(p, 0)
+        self.assertEqual([c["model"] for c in pedidos], [openai_imagen.MODELOS[0]] + [openai_imagen.MODELOS[1]] * 2)
+        self.assertIn(imagen.SUAVE, pedidos[2]["prompt"])
+        self.assertEqual(p["escenas"][0]["estado_imagen"], "ia")
+
+    def test_si_openai_falla_se_hace_con_flux(self):
+        pedidos, simulado = self.openai(lambda cuerpo, n: error_http(401, b'{"error": {"message": "bad key"}}'))
+        modelos = []
+
+        def post(url, cabeceras, cuerpo):
+            modelos.append(url)
+            return {"images": [{"url": "file://" + self.png}]}
+
+        p = self.proyecto(calidad="openai")
+        with mock.patch.dict(os.environ, {"OPENAI_API_KEY": "sk-x"}), simulado, mock.patch.object(imagen, "post", post):
+            videosyt.storyboard(p)
+        self.assertEqual(set(modelos), {"https://fal.run/fal-ai/flux/dev"})
+        self.assertEqual({e["estado_imagen"] for e in p["escenas"]}, {"ia"})
+        self.assertTrue(any("OpenAI" in a and "bad key" in a for a in p["avisos"]))
+        self.assertLessEqual(len(pedidos), videosyt.LIMITES["openai"])  # la clave mala se deja de usar
 
     def test_leer_respuesta_del_director(self):
         self.assertEqual(director.leer_respuesta('Sure: [{"n": 2, "imagen": "x", "personaje": true}]', {1, 2}),
