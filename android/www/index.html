@@ -95,6 +95,14 @@
   .aviso-actualizacion a { background: var(--accent); color: #fff; font-weight: 700; padding: 8px 14px;
                            border-radius: 10px; text-decoration: none; }
   #respaldo textarea { min-height: 70px; font-size: 12px; }
+  .historial { display: grid; gap: 10px; }
+  .hecho { display: flex; gap: 10px; align-items: center; border: 1px solid var(--line); border-radius: 12px;
+           background: var(--soft); padding: 8px; }
+  .hecho img, .hecho .sin-foto { width: 96px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px;
+                                 background: #000; flex: none; }
+  .hecho .datos { flex: 1; min-width: 0; }
+  .hecho .titulo { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hecho .acciones { margin-top: 6px; } .hecho .acciones button { font-size: 13px; padding: 6px; }
 </style>
 </head>
 <body>
@@ -165,6 +173,11 @@
     <canvas id="lienzo" style="margin-top:12px"></canvas>
   </section>
 
+  <section class="card oculto" id="misVideos">
+    <h2>Mis videos</h2>
+    <div class="historial" id="historial"></div>
+  </section>
+
   <section class="card oculto" id="resultado">
     <h2>Tu video</h2>
     <video id="video" controls playsinline></video>
@@ -209,6 +222,7 @@
 
 <script type="module">
 import { ESTILOS, RITMOS, cargarEstilos, vistaPrevia, escenas, crearStoryboard, regenerarEscena, renderizar } from "./motor.js";
+import { guardarVideo, listarVideos, leerVideo, borrarVideo } from "./historial.js";
 
 const $ = s => document.querySelector(s);
 const CAMPOS = [
@@ -426,7 +440,17 @@ $("#render").onclick = async () => {
     $("#video").src = URL.createObjectURL(blob);
     $("#guardado").textContent = "";
     pintarAvisos($("#avisosVideo"), proyecto.avisos);
+    $("#volver").classList.remove("oculto");
     $("#resultado").classList.remove("oculto");
+    try {
+      await guardarVideo({ blob, titulo: tituloDe($("#guion").value), estilo: ESTILOS[proyecto.estilo]?.nombre || "",
+                           miniatura: portada(proyecto) });
+      $("#guardado").textContent = "Guardado en Mis videos.";
+    } catch (e) {
+      console.error(e);
+      $("#guardado").textContent = "No se pudo guardar en Mis videos (¿falta espacio?). Usa Guardar / Compartir.";
+    }
+    pintarHistorial();
     $("#resultado").scrollIntoView({ behavior: "smooth" });
   } catch (e) {
     console.error(e);
@@ -440,6 +464,75 @@ $("#render").onclick = async () => {
 };
 
 $("#volver").onclick = () => { pintarTablero(); verTablero(); };
+
+// ---------- Mis videos (historial) ----------
+
+function tituloDe(guion) {
+  const linea = guion.split("\n").map(l => l.trim()).find(Boolean) || "Video sin título";
+  return linea.length > 70 ? linea.slice(0, 67) + "…" : linea;
+}
+
+/** Miniatura pequeña (JPEG) con la primera imagen del video, para la lista. */
+function portada(p) {
+  const img = p.escenas.find(e => e.fuente)?.fuente;
+  if (!img) return "";
+  const c = document.createElement("canvas");
+  c.width = 192; c.height = 108;
+  const ancho = img.width || img.videoWidth, alto = img.height || img.videoHeight;
+  const escala = Math.max(c.width / ancho, c.height / alto);
+  c.getContext("2d").drawImage(img, (c.width - ancho * escala) / 2, (c.height - alto * escala) / 2, ancho * escala, alto * escala);
+  try { return c.toDataURL("image/jpeg", 0.7); } catch { return ""; }
+}
+
+async function pintarHistorial() {
+  let lista = [];
+  try { lista = await listarVideos(); } catch (e) { console.error(e); }
+  const caja = $("#historial");
+  caja.innerHTML = "";
+  $("#misVideos").classList.toggle("oculto", !lista.length);
+  for (const v of lista) {
+    const fila = document.createElement("div");
+    fila.className = "hecho";
+    const foto = v.miniatura ? document.createElement("img") : document.createElement("div");
+    if (v.miniatura) foto.src = v.miniatura; else foto.className = "sin-foto";
+    const datos = document.createElement("div");
+    datos.className = "datos";
+    const titulo = document.createElement("div");
+    titulo.className = "titulo"; titulo.textContent = v.titulo;
+    const info = document.createElement("div");
+    info.className = "ayuda";
+    info.textContent = `${new Date(v.fecha).toLocaleString()} · ${v.estilo} · ${(v.tamano / 1e6).toFixed(1)} MB`;
+    const acciones = document.createElement("div");
+    acciones.className = "acciones";
+    const ver = document.createElement("button"), quitar = document.createElement("button");
+    ver.textContent = "Ver"; quitar.textContent = "Borrar";
+    ver.onclick = () => abrirDelHistorial(v);
+    quitar.onclick = async () => {
+      if (!confirm(`¿Borrar "${v.titulo}" del historial?`)) return;
+      await borrarVideo(v.id);
+      pintarHistorial();
+    };
+    acciones.append(ver, quitar);
+    datos.append(titulo, info, acciones);
+    fila.append(foto, datos);
+    caja.appendChild(fila);
+  }
+}
+
+async function abrirDelHistorial(v) {
+  const guardado = await leerVideo(v.id);
+  if (!guardado) { alert("No se encontró este video en el teléfono."); return; }
+  blob = guardado;
+  $("#video").src = URL.createObjectURL(blob);
+  $("#guardado").textContent = "";
+  pintarAvisos($("#avisosVideo"), []);
+  $("#volver").classList.add("oculto");  // el storyboard de un video viejo ya no está en memoria
+  $("#storyboard").classList.add("oculto");
+  $("#resultado").classList.remove("oculto");
+  $("#resultado").scrollIntoView({ behavior: "smooth" });
+}
+
+pintarHistorial();
 
 function base64(b) {
   return new Promise(ok => { const r = new FileReader(); r.onload = () => ok(r.result.split(",")[1]); r.readAsDataURL(b); });
