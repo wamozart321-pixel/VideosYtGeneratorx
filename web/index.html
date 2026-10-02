@@ -147,6 +147,27 @@
         <button type="button" data-f="9:16" aria-pressed="false">Vertical 9:16</button>
       </div>
 
+      <label class="t">Escenas por minuto</label>
+      <div class="segmento" id="ritmo">
+        <button type="button" data-v="pocas" aria-pressed="false">Pocas ~6</button>
+        <button type="button" data-v="normal" aria-pressed="true">Normal ~12</button>
+        <button type="button" data-v="muchas" aria-pressed="false">Muchas ~18</button>
+      </div>
+      <div class="ayuda">Los párrafos largos se parten en varias escenas para que la imagen cambie seguido.</div>
+
+      <label class="t">Calidad de imagen</label>
+      <div class="segmento" id="calidad">
+        <button type="button" data-v="rapida" aria-pressed="false">Rápida</button>
+        <button type="button" data-v="buena" aria-pressed="true">Buena</button>
+        <button type="button" data-v="maxima" aria-pressed="false">Máxima</button>
+      </div>
+      <div class="ayuda" id="ayudaCalidad"></div>
+
+      <label class="check">
+        <input type="checkbox" id="subtitulos" checked>
+        <span>Subtítulos en el video<br><small class="ayuda">Frases cortas que cambian con la voz.</small></span>
+      </label>
+
       <label class="check">
         <input type="checkbox" id="clips">
         <span>Animar cada escena con video IA (Kling)<br>
@@ -287,22 +308,38 @@ function elegirEstilo(id) {
 
 $("#abrirSelector").onclick = () => { pintarSelector(); $("#selector").showModal(); };
 $("#cerrarSelector").onclick = () => $("#selector").close();
-let formato = "16:9";
+let formato = "16:9", ritmo = "normal", calidad = "buena";
 for (const b of document.querySelectorAll("#formato button"))
   b.onclick = () => { formato = b.dataset.f;
     for (const o of document.querySelectorAll("#formato button")) o.setAttribute("aria-pressed", o === b); };
+const CALIDADES = {
+  rapida: "Flux schnell: la más barata (~$0.003 por imagen) pero con más errores.",
+  buena: "Flux dev: mucho mejor detalle y menos letras raras (~$0.025 por imagen).",
+  maxima: "Flux 1.1 pro: la mejor calidad (~$0.04 por imagen).",
+};
+function segmento(id, alElegir) {
+  for (const b of document.querySelectorAll(`#${id} button`))
+    b.onclick = () => { alElegir(b.dataset.v);
+      for (const o of document.querySelectorAll(`#${id} button`)) o.setAttribute("aria-pressed", o === b); };
+}
+segmento("ritmo", v => { ritmo = v; contar(); });
+segmento("calidad", v => { calidad = v; $("#ayudaCalidad").textContent = CALIDADES[v]; });
+$("#ayudaCalidad").textContent = CALIDADES[calidad];
 
-$("#guion").addEventListener("input", e => {
-  const t = e.target.value.trim(), palabras = t ? t.split(/\s+/).length : 0;
-  const escenas = t ? t.split(/\n\s*\n/).filter(p => p.trim()).length : 0;
-  $("#conteo").textContent = `${palabras} palabras · hasta ${escenas} escena${escenas === 1 ? "" : "s"} · ~${Math.round(palabras / 2.5)} s de video`;
-});
+function contar() {
+  const t = $("#guion").value.trim(), palabras = t ? t.split(/\s+/).length : 0;
+  const parrafos = t ? t.split(/\n\s*\n/).filter(p => p.trim()).length : 0;
+  const escenas = Math.max(parrafos, Math.round(palabras / ({pocas: 25, normal: 12, muchas: 8}[ritmo] * 1.3)));
+  $("#conteo").textContent = `${palabras} palabras · ~${escenas} escena${escenas === 1 ? "" : "s"} · ~${Math.round(palabras / 2.5)} s de video`;
+}
+$("#guion").addEventListener("input", contar);
 
 $("#crear").onclick = async () => {
   $("#errorForm").textContent = "";
   try {
     const p = await enviar("/api/proyectos", {guion: $("#guion").value, biblia: $("#biblia").value,
-                                              estilo: estiloElegido, formato, clips: $("#clips").checked});
+                                              estilo: estiloElegido, formato, ritmo, calidad,
+                                              subtitulos: $("#subtitulos").checked, clips: $("#clips").checked});
     abrir(p.id);
   } catch (e) { $("#errorForm").textContent = e.message; }
 };

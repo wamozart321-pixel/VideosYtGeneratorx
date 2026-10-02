@@ -9,9 +9,16 @@ from .http import descargar, post
 from .montaje import ruta_filtro
 
 
+SIN_TEXTO = "purely visual scene, no written words, no captions, no signs, no lettering anywhere"
+
+
 def componer_prompt(prompt, estilo, biblia=""):
-    """La biblia visual va primero y es idéntica en todas las escenas; así se mantiene el estilo."""
-    partes = [biblia.strip(), prompt.strip(), estilo["prompt_imagen"], "no text, no letters, no watermark"]
+    """La biblia visual va primero y es idéntica en todas las escenas; así se mantiene el estilo.
+
+    El texto de la escena va como algo a ilustrar, no a escribir: si no, Flux tiende a dibujar
+    letras inventadas en carteles, libros o pantallas."""
+    escena = prompt.strip().strip('"«»“”')
+    partes = [biblia.strip(), estilo["prompt_imagen"], f"Scene illustrating: {escena}" if escena else "", SIN_TEXTO]
     return ". ".join(p for p in partes if p)
 
 
@@ -23,7 +30,7 @@ def generar(prompt, estilo, destino, biblia="", semilla=None):
     }
     if semilla is not None:
         cuerpo["seed"] = semilla  # misma semilla en todo el video = estilo más estable
-    modelo = os.environ.get("FAL_IMAGE_MODEL") or "fal-ai/flux/schnell"
+    modelo = os.environ.get("FAL_IMAGE_MODEL") or estilo.get("modelo") or "fal-ai/flux/dev"
     r = post(f"https://fal.run/{modelo}", {"authorization": f"Key {os.environ['FAL_KEY']}"}, cuerpo)
     url = r["images"][0]["url"]
     descargar(url, destino)
