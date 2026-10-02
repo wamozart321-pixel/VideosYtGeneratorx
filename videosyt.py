@@ -33,14 +33,34 @@ LIMITES = {"imagen": 4, "voz": 3, "video": 2}
 MONTAJES_A_LA_VEZ = max(1, min(4, (os.cpu_count() or 2) // 2))
 
 
+FUENTES = {"sans": "fuentes/DejaVuSans-Bold.ttf", "serif": "fuentes/DejaVuSerif-Bold.ttf"}
+FORMATOS = ("16:9", "9:16")
+ESCENA_DE_MUESTRA = ("sitting at a desk late at night, focused and determined",
+                     "a desk with an open notebook and a warm lamp late at night")
+
+
 def estilos():
-    carpeta = os.path.join(AQUI, "estilos")
-    resultado = {}
-    for archivo in sorted(os.listdir(carpeta)):
-        if archivo.endswith(".json"):
-            with open(os.path.join(carpeta, archivo)) as f:
-                resultado[archivo[:-5]] = json.load(f)
-    return resultado
+    """Catálogo compartido con la app de Android (estilos/estilos.json)."""
+    with open(os.path.join(AQUI, "estilos", "estilos.json"), encoding="utf-8") as f:
+        lista = json.load(f)
+    return {e["id"]: {**e, "fondo_demo": "0x" + e["fondo"].lstrip("#"), "fuente": FUENTES[e["fuente"]],
+                      "color_texto": "0x" + e["color_texto"].lstrip("#"), "formato": "16:9"}
+            for e in lista}
+
+
+def estilo_de(proyecto):
+    """El estilo visual del proyecto con su formato (el formato se elige aparte del estilo)."""
+    catalogo = estilos()
+    nombre = proyecto["estilo"]
+    formato = proyecto.get("formato") or ("9:16" if nombre == "shorts" else "16:9")  # "shorts" era un estilo antes
+    return {**catalogo.get(nombre, catalogo["cinematico"]), "formato": formato}
+
+
+def vista_previa(id_estilo, destino):
+    """Imagen de muestra de un estilo para el selector (una llamada a Flux). Requiere FAL_KEY."""
+    estilo = estilos()[id_estilo]
+    escena = ESCENA_DE_MUESTRA[0] if estilo["personaje"] else ESCENA_DE_MUESTRA[1]
+    return con_reintentos(imagen.generar, escena, estilo, destino, estilo["personaje"], 7, intentos=2)
 
 
 def modo():
@@ -49,12 +69,12 @@ def modo():
 
 # ---------- proyecto ----------
 
-def nuevo_proyecto(texto, nombre_estilo, carpeta, biblia="", clips=False):
+def nuevo_proyecto(texto, nombre_estilo, carpeta, biblia="", clips=False, formato="16:9"):
     escenas = guion.escenas(texto)
     if not escenas:
         raise ValueError("El guion no tiene texto para narrar")
     proyecto = {
-        "carpeta": carpeta, "estilo": nombre_estilo, "biblia": biblia.strip(), "clips": bool(clips),
+        "carpeta": carpeta, "estilo": nombre_estilo, "formato": formato, "biblia": biblia.strip(), "clips": bool(clips),
         "semilla": random.randint(0, 2**31 - 1), "guion": texto, "avisos": [],
         "escenas": [{**e, "imagen": f"escena{i:02d}.png", "url": None, "estado_imagen": "pendiente",
                      "version": 0} for i, e in enumerate(escenas, 1)],
@@ -158,7 +178,7 @@ def _resolver_respaldos(proyecto, estilo):
 
 def storyboard(proyecto, avisar=lambda *_: None):
     """Genera en paralelo las imágenes de todas las escenas."""
-    estilo = estilos()[proyecto["estilo"]]
+    estilo = estilo_de(proyecto)
     proveedores, semaforos = Proveedores(), _semaforos()
     escenas = proyecto["escenas"]
     progreso = _Progreso(avisar, 2, 98, len(escenas), "Creando imágenes")
@@ -186,7 +206,7 @@ def editar_escena(proyecto, i, narracion=None, prompt_visual=None):
 
 def regenerar_escena(proyecto, i, nueva_semilla=True):
     """Vuelve a crear la imagen de una escena. Con nueva_semilla sale una variación distinta."""
-    estilo = estilos()[proyecto["estilo"]]
+    estilo = estilo_de(proyecto)
     e = proyecto["escenas"][i]
     if nueva_semilla:
         e["semilla"] = random.randint(0, 2**31 - 1)
@@ -199,7 +219,7 @@ def regenerar_escena(proyecto, i, nueva_semilla=True):
 # ---------- fase 2: render ----------
 
 def renderizar(proyecto, salida, avisar=lambda *_: None):
-    estilo = estilos()[proyecto["estilo"]]
+    estilo = estilo_de(proyecto)
     tamano = TAMANOS[estilo["formato"]]
     carpeta, escenas = proyecto["carpeta"], proyecto["escenas"]
     proveedores, semaforos = Proveedores(), _semaforos()
@@ -277,9 +297,10 @@ def resumen_respaldos(proyecto):
     return "; ".join(partes)
 
 
-def crear_video(texto, nombre_estilo, salida, avisar=print, usar_clips=False, biblia=""):
+def crear_video(texto, nombre_estilo, salida, avisar=print, usar_clips=False, biblia="", formato="16:9"):
     """Flujo completo sin pausa para revisar (línea de comandos y prueba del .exe)."""
-    proyecto = nuevo_proyecto(texto, nombre_estilo, tempfile.mkdtemp(prefix="videosyt-"), biblia, usar_clips)
+    proyecto = nuevo_proyecto(texto, nombre_estilo, tempfile.mkdtemp(prefix="videosyt-"), biblia, usar_clips,
+                              formato)
     storyboard(proyecto, lambda pct, msg: avisar(pct // 3, msg))
     renderizar(proyecto, salida, lambda pct, msg: avisar(33 + pct * 2 // 3, msg))
     return proyecto
@@ -289,6 +310,7 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser(description="Crea un video a partir de un guion.")
     p.add_argument("guion")
     p.add_argument("--estilo", default="cinematico")
+    p.add_argument("--formato", default="16:9", choices=FORMATOS)
     p.add_argument("--salida", default="video.mp4")
     p.add_argument("--biblia", default="", help="personajes y estilo fijos para todas las escenas")
     p.add_argument("--clips", action="store_true", help="anima cada escena con Kling (requiere FAL_KEY)")
@@ -297,7 +319,7 @@ if __name__ == "__main__":
     inicio = time.time()
     with open(a.guion) as f:
         proyecto = crear_video(f.read(), a.estilo, a.salida, lambda pct, msg: print(f"[{pct:3d}%] {msg}"),
-                               a.clips, a.biblia)
+                               a.clips, a.biblia, a.formato)
     for aviso in proyecto["avisos"]:
         print("Aviso:", aviso)
     if resumen_respaldos(proyecto):

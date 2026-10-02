@@ -91,9 +91,15 @@ guion + estilo + personajes fijos
 
 ## Estilos
 
-Cada estilo es un JSON en `estilos/`: sufijo de prompt para las imágenes, formato (16:9 o 9:16),
-fuente y color de subtítulos y velocidad del zoom. Para crear uno nuevo, copia un JSON y cambia valores;
-aparece solo en la app.
+Hay 20 estilos visuales en `estilos/estilos.json`, compartidos por la app de Windows y la de Android.
+Cada uno tiene su prompt de imagen, colores, tipografía, velocidad del zoom y, si es un estilo
+**con personaje**, un personaje sugerido que se copia en "Personajes y estilo fijo" al elegirlo
+(puedes cambiarlo). El formato (horizontal 16:9 o vertical 9:16) se elige aparte, así que cualquier
+estilo sirve para Shorts.
+
+En el selector, **Crear vistas previas** genera una imagen de muestra de cada estilo con tu clave de
+fal.ai (20 imágenes, unos centavos, una sola vez). Para agregar un estilo, copia una entrada del JSON,
+cámbiale el `id` y los valores, y aparece en las dos apps.
 
 ## Archivos
 
@@ -101,7 +107,7 @@ aparece solo en la app.
 - `android/`: la app de Android (Capacitor). `www/motor.js` hace todo el flujo en el teléfono.
 - `servidor.py`: la app (interfaz en `web/index.html`). Los proyectos quedan en `proyectos/` y los videos en `salida/`.
 - `videosyt.py`: el motor; también se puede usar por línea de comandos:
-  `python3 videosyt.py ejemplos/guion.txt --estilo anime --salida video.mp4`
+  `python3 videosyt.py ejemplos/guion.txt --estilo anime --formato 9:16 --salida video.mp4`
 - `proveedores/`: un archivo por paso (y `reintentos.py`). Para cambiar de IA solo se toca ese archivo.
 - `pruebas/`: pruebas del motor con las APIs simuladas (no gastan créditos):
   `python3 -m unittest discover pruebas`

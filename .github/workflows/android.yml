@@ -28,6 +28,7 @@ jobs:
 
       - name: Preparar el proyecto Android
         run: |
+          cp ../estilos/estilos.json www/estilos.json
           npm install
           npx cap add android
           npx cap sync android
