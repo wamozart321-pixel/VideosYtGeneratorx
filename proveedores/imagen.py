@@ -9,6 +9,13 @@ from .http import descargar, post
 from .montaje import ruta_filtro
 
 
+SUAVE = "family friendly, symbolic and non-violent depiction, no blood, no gore, no nudity"
+
+
+class ImagenBloqueada(Exception):
+    """fal.ai marcó la imagen como contenido sensible y la entregó en negro."""
+
+
 SIN_TEXTO = "purely visual scene, no written words, no captions, no signs, no lettering anywhere"
 
 
@@ -33,7 +40,16 @@ def generar(prompt, estilo, destino, biblia="", semilla=None):
     if semilla is not None:
         cuerpo["seed"] = semilla  # semilla propia por escena: varía la composición
     modelo = os.environ.get("FAL_IMAGE_MODEL") or estilo.get("modelo") or "fal-ai/flux/dev"
-    r = post(f"https://fal.run/{modelo}", {"authorization": f"Key {os.environ['FAL_KEY']}"}, cuerpo)
+    for intento in range(3):
+        r = post(f"https://fal.run/{modelo}", {"authorization": f"Key {os.environ['FAL_KEY']}"}, cuerpo)
+        if not any(r.get("has_nsfw_concepts") or []):
+            break
+        # El filtro de contenido de fal devuelve la imagen en negro (pasa con temas como violencia).
+        # Se reintenta con otra semilla y una versión más suave de la escena.
+        cuerpo["seed"] = (cuerpo.get("seed") or 0) + 7919 * (intento + 1)
+        cuerpo["prompt"] = f"{componer_prompt(prompt, estilo, biblia)}. {SUAVE}"
+    else:
+        raise ImagenBloqueada("el filtro de contenido de fal.ai la dejó en negro; prueba a cambiar la descripción")
     url = r["images"][0]["url"]
     descargar(url, destino)
     return url

@@ -25,6 +25,7 @@ Rules:
 - Follow the eras and places of the story (for example a smoky 1930s jazz club, a 1960s pirate radio ship, a modern phone screen).
 - Turn abstract ideas and metaphors into concrete visual symbols.
 - Never ask for written words, letters, logos, captions or readable signs.
+- Show violent, cruel or tragic events symbolically (shadows, empty places, meaningful objects, faces reacting), never graphic violence, bodies, blood or nudity: the image model blacks those images out.
 - Do not describe the art style; it is added later.
 - If there is a recurring character, it is the protagonist of the video: put it in about three of every four scenes, acting out or reacting to what that scene is about, inside that scene's own setting and era. Start those prompts with the character's full description and set "personaje" to true. Leave it out (false) only for establishing shots, close-ups of objects or scenes about specific real people. If there is no recurring character, "personaje" is always false.
 Reply only with a JSON array, one object per scene with the same numbers: [{"n": 1, "imagen": "...", "personaje": false}]"""
