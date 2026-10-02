@@ -13,12 +13,14 @@ SIN_TEXTO = "purely visual scene, no written words, no captions, no signs, no le
 
 
 def componer_prompt(prompt, estilo, biblia=""):
-    """La biblia visual va primero y es idéntica en todas las escenas; así se mantiene el estilo.
+    """Primero lo que pasa en la escena, luego el estilo y al final el personaje fijo (si sale).
 
-    El texto de la escena va como algo a ilustrar, no a escribir: si no, Flux tiende a dibujar
-    letras inventadas en carteles, libros o pantallas."""
+    Antes la biblia iba primero e idéntica en todas las escenas, y Flux dibujaba siempre el mismo
+    personaje en el mismo lugar. El texto de la escena va como algo a ilustrar, no a escribir:
+    si no, Flux tiende a dibujar letras inventadas en carteles, libros o pantallas."""
     escena = prompt.strip().strip('"«»“”')
-    partes = [biblia.strip(), estilo["prompt_imagen"], f"Scene illustrating: {escena}" if escena else "", SIN_TEXTO]
+    partes = [f"Scene illustrating: {escena}" if escena else "", estilo["prompt_imagen"],
+              f"Recurring character: {biblia.strip()}" if biblia.strip() else "", SIN_TEXTO]
     return ". ".join(p for p in partes if p)
 
 
@@ -29,7 +31,7 @@ def generar(prompt, estilo, destino, biblia="", semilla=None):
         "image_size": "portrait_16_9" if estilo["formato"] == "9:16" else "landscape_16_9",
     }
     if semilla is not None:
-        cuerpo["seed"] = semilla  # misma semilla en todo el video = estilo más estable
+        cuerpo["seed"] = semilla  # semilla propia por escena: varía la composición
     modelo = os.environ.get("FAL_IMAGE_MODEL") or estilo.get("modelo") or "fal-ai/flux/dev"
     r = post(f"https://fal.run/{modelo}", {"authorization": f"Key {os.environ['FAL_KEY']}"}, cuerpo)
     url = r["images"][0]["url"]

@@ -97,7 +97,7 @@ export function escenas(texto, palabrasPorEscena = RITMOS.normal) {
     }
     const visual = visuales.join(" ");
     partir(narracion.join(" "), palabrasPorEscena).forEach((t, n) =>
-      resultado.push({ narracion: t, prompt_visual: visual && n === 0 ? visual : t }));
+      resultado.push({ narracion: t, prompt_visual: visual && n === 0 ? visual : t, visual_propio: Boolean(visual) && n === 0 }));
   }
   return resultado;
 }
@@ -206,22 +206,24 @@ async function urlLocal(url) {
   return URL.createObjectURL(await r.blob());
 }
 
-/** La "biblia visual" va igual en todas las escenas para que personajes y estilo no cambien. */
 const SIN_TEXTO = "purely visual scene, no written words, no captions, no signs, no lettering anywhere";
 
 /**
- * El texto de la escena va como algo a ilustrar, no a escribir: si no, Flux tiende a dibujar
- * letras inventadas en carteles, libros o pantallas.
+ * Primero lo que pasa en la escena, luego el estilo y al final el personaje fijo (si sale).
+ * Antes la biblia iba primero en todas las escenas y Flux dibujaba siempre el mismo personaje
+ * en el mismo lugar. El texto de la escena va como algo a ilustrar, no a escribir: si no, Flux
+ * tiende a dibujar letras inventadas en carteles, libros o pantallas.
  */
 export function componerPrompt(prompt, estilo, biblia = "") {
   const escena = prompt.trim().replace(/^["«“]+|["»”]+$/g, "");
-  return [biblia.trim(), estilo.prompt, escena && `Scene illustrating: ${escena}`, SIN_TEXTO].filter(Boolean).join(". ");
+  return [escena && `Scene illustrating: ${escena}`, estilo.prompt,
+          biblia.trim() && `Recurring character: ${biblia.trim()}`, SIN_TEXTO].filter(Boolean).join(". ");
 }
 
 async function imagenIA(escena, proyecto, claves) {
   const estilo = estiloDe(proyecto);
   const r = await falPost(estilo.modelo, {
-    prompt: componerPrompt(escena.prompt_visual, estilo, proyecto.biblia),
+    prompt: componerPrompt(escena.prompt_visual, estilo, escena.personaje === false ? "" : proyecto.biblia),
     image_size: estilo.formato === "9:16" ? "portrait_16_9" : "landscape_16_9",
     seed: escena.semilla ?? proyecto.semilla,
   }, claves.FAL_KEY);
@@ -283,6 +285,73 @@ export async function vistaPrevia(id, claves) {
   return c.toDataURL("image/jpeg", 0.8);
 }
 
+// ---------- Director: qué se ve en cada escena ----------
+// Igual que proveedores/director.py: un modelo de texto barato (vía fal, con la misma FAL_KEY)
+// lee el guion completo y describe cada escena con lugar, época, objetos y plano distintos.
+
+const MODELOS_DIRECTOR = ["google/gemini-2.5-flash", "openai/gpt-4.1-mini"];
+const POR_LOTE = 25, MAX_GUION = 12000;
+const INSTRUCCIONES = `You are the art director of a faceless YouTube channel. You receive a narration script split into numbered scenes. For each scene write one prompt for an AI image model that shows what that part of the script is actually about: the concrete subject, place, era, objects and action.
+Rules:
+- English, 20 to 45 words per scene.
+- Neighbouring scenes must look different: change the setting, the subject and the shot (wide establishing shot, close-up of an object, crowd, aerial view, detail of hands, silhouette, over-the-shoulder...).
+- Follow the eras and places of the story (for example a smoky 1930s jazz club, a 1960s pirate radio ship, a modern phone screen).
+- Turn abstract ideas and metaphors into concrete visual symbols.
+- Never ask for written words, letters, logos, captions or readable signs.
+- Do not describe the art style; it is added later.
+- "personaje" is true only when the recurring character fits the scene, at most about one scene in three; otherwise show the real people, places or objects. If there is no recurring character, it is always false.
+Reply only with a JSON array, one object per scene with the same numbers: [{"n": 1, "imagen": "...", "personaje": false}]`;
+
+export function leerRespuesta(texto, numeros) {
+  const m = (texto || "").match(/\[[\s\S]*\]/);
+  if (!m) throw new Error("el director no devolvió una lista");
+  const resultado = {};
+  for (const item of JSON.parse(m[0]))
+    if (item && numeros.has(item.n) && String(item.imagen || "").trim())
+      resultado[item.n] = [String(item.imagen).trim(), Boolean(item.personaje)];
+  if (!Object.keys(resultado).length) throw new Error("el director no describió ninguna escena");
+  return resultado;
+}
+
+async function describirLote(guion, lote, personaje, clave) {
+  const prompt = `Recurring character: ${personaje || "none"}\n\nFull script (context):\n${guion.slice(0, MAX_GUION)}` +
+    `\n\nScenes to describe:\n${lote.map(([n, t]) => `${n}. ${t}`).join("\n")}`;
+  let error;
+  for (const model of MODELOS_DIRECTOR) {  // si un modelo no está disponible, se prueba el siguiente
+    try {
+      const r = await conReintentos(() => falPost("openrouter/router",
+        { model, system_prompt: INSTRUCCIONES, prompt, temperature: 0.8 }, clave), 3);
+      if (r.error) throw new Error(r.error);
+      return leerRespuesta(r.output, new Set(lote.map(([n]) => n)));
+    } catch (e) { error = e; }
+  }
+  throw error;
+}
+
+/** Devuelve {número de escena (desde 1): [descripción en inglés, aparece el personaje]}. */
+async function describir(guion, narraciones, personaje, clave) {
+  const numeradas = narraciones.map((t, i) => [i + 1, t]), lotes = [];
+  for (let i = 0; i < numeradas.length; i += POR_LOTE) lotes.push(numeradas.slice(i, i + POR_LOTE));
+  const resultados = await Promise.allSettled(lotes.map(l => describirLote(guion, l, personaje, clave)));
+  const resultado = Object.assign({}, ...resultados.filter(r => r.status === "fulfilled").map(r => r.value));
+  if (!Object.keys(resultado).length) throw resultados.find(r => r.status === "rejected").reason;
+  return resultado;
+}
+
+/** Cambia el texto narrado de cada escena por una descripción visual; respeta las "Imagen:" del guion. */
+async function dirigir(proyecto, guion, claves) {
+  try {
+    const descripciones = await describir(guion, proyecto.escenas.map(e => e.narracion), proyecto.biblia, claves.FAL_KEY);
+    proyecto.escenas.forEach((e, i) => {
+      if (descripciones[i + 1] && !e.visual_propio) [e.prompt_visual, e.personaje] = descripciones[i + 1];
+    });
+    return null;
+  } catch (e) {
+    console.error(e);
+    return `No se pudo describir cada escena con IA (${e.message}); las imágenes se basan en el texto del guion.`;
+  }
+}
+
 // ---------- Storyboard (fase 1) ----------
 
 async function crearImagen(proyecto, i, claves, sesion) {
@@ -330,8 +399,15 @@ export async function crearStoryboard({ guion, estilo, formato = "16:9", ritmo =
                                        subtitulos = true, biblia = "", claves, avisar }) {
   const lista = escenas(guion, RITMOS[ritmo]);
   if (!lista.length) throw new Error("El guion no tiene escenas con texto para narrar");
-  const proyecto = { estilo, formato, calidad, subtitulos, biblia, semilla: Math.floor(Math.random() * 2 ** 31), avisos: [],
-                     escenas: lista.map(e => ({ ...e, estado: "pendiente", version: 0 })) };
+  const semilla = Math.floor(Math.random() * 2 ** 31);  // cada escena con la suya: composiciones distintas
+  const proyecto = { estilo, formato, calidad, subtitulos, biblia, semilla, avisos: [],
+                     escenas: lista.map((e, i) => ({ ...e, semilla: (semilla + i + 1) % 2 ** 31, personaje: true,
+                                                     estado: "pendiente", version: 0 })) };
+  let avisoDirector = null;
+  if (claves.FAL_KEY) {
+    avisar(1, "Pensando qué mostrar en cada escena");
+    avisoDirector = await dirigir(proyecto, guion, claves);
+  }
   const sesion = nuevaSesion();
   let hechas = 0;
   avisar(2, "Creando imágenes");
@@ -341,7 +417,7 @@ export async function crearStoryboard({ guion, estilo, formato = "16:9", ritmo =
     avisar(2 + Math.round(96 * hechas / lista.length), `Imágenes (${hechas} de ${lista.length})`);
   }));
   resolverRespaldos(proyecto);
-  proyecto.avisos = avisosDeBloqueo(sesion);
+  proyecto.avisos = [...(avisoDirector ? [avisoDirector] : []), ...avisosDeBloqueo(sesion)];
   avisar(100, "Revisa las escenas");
   return proyecto;
 }
