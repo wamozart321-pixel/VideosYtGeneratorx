@@ -26,7 +26,7 @@ Rules:
 - Turn abstract ideas and metaphors into concrete visual symbols.
 - Never ask for written words, letters, logos, captions or readable signs.
 - Do not describe the art style; it is added later.
-- "personaje" is true only when the recurring character fits the scene, at most about one scene in three; otherwise show the real people, places or objects. If there is no recurring character, it is always false.
+- If there is a recurring character, it is the protagonist of the video: put it in about three of every four scenes, acting out or reacting to what that scene is about, inside that scene's own setting and era. Start those prompts with the character's full description and set "personaje" to true. Leave it out (false) only for establishing shots, close-ups of objects or scenes about specific real people. If there is no recurring character, "personaje" is always false.
 Reply only with a JSON array, one object per scene with the same numbers: [{"n": 1, "imagen": "...", "personaje": false}]"""
 
 
