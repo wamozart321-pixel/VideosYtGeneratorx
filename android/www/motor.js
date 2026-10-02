@@ -21,8 +21,8 @@ function estiloDe(proyecto) {
 
 const TAMANOS = { "16:9": [1920, 1080], "9:16": [1080, 1920] };  // 1080p
 const FPS = 25;
-const LIMITES = { imagen: 4, voz: 2, video: 2 };  // llamadas a la vez por API (ElevenLabs gratis admite 2)
-const NOMBRES = { imagen: "fal.ai (imágenes)", voz: "ElevenLabs (voz)", video: "fal.ai (clips de video)" };
+const LIMITES = { imagen: 4, openai: 3, voz: 2, video: 2 };  // llamadas a la vez por API (ElevenLabs gratis admite 2)
+const NOMBRES = { imagen: "fal.ai (imágenes)", openai: "OpenAI (imágenes)", voz: "ElevenLabs (voz)", video: "fal.ai (clips de video)" };
 
 // ---------- 1. Escenas (sin IA; formato de Scripzy) ----------
 
@@ -34,7 +34,8 @@ const NARRADOR = /^\s*(?:narrador|narraci[oó]n|voz(?: en off)?|locutor|narrator
 // Ritmo: palabras por escena (a ~2,5 palabras por segundo).
 export const RITMOS = { pocas: 25, normal: 12, muchas: 8 };
 // Calidad de imagen → modelo de fal.ai.
-export const CALIDADES = { rapida: "fal-ai/flux/schnell", buena: "fal-ai/flux/dev", maxima: "fal-ai/flux-pro/v1.1" };
+export const CALIDADES = { rapida: "fal-ai/flux/schnell", buena: "fal-ai/flux/dev", maxima: "fal-ai/flux-pro/v1.1",
+                           openai: "openai" };
 const ORACION = /(?<=[.!?…])["'»”)]*\s+/;
 const PAUSA = /(?<=[,;:])\s+/;
 const contar = t => t.split(/\s+/).filter(Boolean).length;
@@ -109,7 +110,7 @@ const CODIGOS_DE_CUENTA = new Set([401, 402, 403]);
 class ErrorHttp extends Error {
   constructor(servicio, status, cuerpo, reintentarEn) {
     super(`${servicio} respondió ${status}: ${cuerpo.slice(0, 300)}`);
-    Object.assign(this, { status, reintentarEn });
+    Object.assign(this, { status, cuerpo, reintentarEn });
   }
 }
 /** La cuenta no puede seguir (sin saldo, clave inválida): no tiene sentido reintentar. */
@@ -230,7 +231,7 @@ async function imagenIA(escena, proyecto, claves) {
   const cuerpo = { prompt, image_size: TAMANO_IMAGEN[estilo.formato],
                    seed: escena.semilla ?? proyecto.semilla };
   for (let intento = 0; intento < 3; intento++) {
-    const r = await falPost(estilo.modelo, cuerpo, claves.FAL_KEY);
+    const r = await falPost(estilo.modelo === "openai" ? CALIDADES.buena : estilo.modelo, cuerpo, claves.FAL_KEY);
     if (!(r.has_nsfw_concepts || []).some(Boolean)) return r.images[0].url;
     // El filtro de contenido de fal devuelve la imagen en negro (pasa con temas como violencia).
     // Se reintenta con otra semilla y una versión más suave de la escena.
@@ -238,6 +239,67 @@ async function imagenIA(escena, proyecto, claves) {
     cuerpo.prompt = `${prompt}. ${SUAVE}`;
   }
   throw new Error("el filtro de contenido de fal.ai la dejó en negro; prueba a cambiar la descripción");
+}
+
+// Igual que proveedores/openai_imagen.py: los modelos de imagen de ChatGPT con una clave de API de
+// OpenAI (se paga aparte de Plus). Sin semilla ni tamaños libres: 3:2 y el montaje recorta.
+const MODELOS_OPENAI = ["gpt-image-2.5-flare", "gpt-image-2", "gpt-image-1.5", "gpt-image-1"];
+const TAMANO_OPENAI = { "16:9": "1536x1024", "9:16": "1024x1536" };
+let modeloOpenAI = null;
+
+class Rechazada extends Error {}
+
+async function pedirOpenAI(modelo, prompt, formato, clave) {
+  try {
+    return await pedir("OpenAI", "https://api.openai.com/v1/images/generations", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${clave}` },
+      body: JSON.stringify({ model: modelo, prompt, size: TAMANO_OPENAI[formato], quality: "medium", n: 1 }),
+    });
+  } catch (e) {
+    if (!(e instanceof ErrorHttp) || (e.status !== 400 && e.status !== 404)) throw e;
+    let error = {};
+    try { error = JSON.parse(e.cuerpo).error || {}; } catch { /* respuesta sin JSON */ }
+    const codigo = String(error.code || ""), mensaje = String(error.message || e.cuerpo || "").slice(0, 300);
+    if (/moderation|safety/.test(codigo)) throw new Rechazada(mensaje);
+    if (/model/i.test(codigo + mensaje)) return null;  // la cuenta no tiene este modelo: se prueba otro
+    throw new Error(`OpenAI respondió ${e.status}: ${mensaje}`);
+  }
+}
+
+async function conAlgunModelo(prompt, formato, clave) {
+  for (const modelo of modeloOpenAI ? [modeloOpenAI] : MODELOS_OPENAI) {
+    let r;
+    try { r = await pedirOpenAI(modelo, prompt, formato, clave); }
+    catch (e) { if (e instanceof Rechazada) modeloOpenAI = modelo; throw e; }  // el modelo existe; fue el contenido
+    if (!r) continue;
+    modeloOpenAI = modelo;
+    return (await fetch(`data:image/png;base64,${r.data[0].b64_json}`)).blob();
+  }
+  throw new Error("tu cuenta de OpenAI no tiene acceso a ningún modelo de imagen");
+}
+
+/** Devuelve la imagen como blob. Si el filtro la rechaza, se pide una versión más suave. */
+async function imagenOpenAI(escena, proyecto, claves) {
+  const estilo = estiloDe(proyecto);
+  const prompt = componerPrompt(escena.prompt_visual, estilo, escena.personaje === false ? "" : proyecto.biblia);
+  try { return await conAlgunModelo(prompt, estilo.formato, claves.OPENAI_API_KEY); }
+  catch (e) { if (!(e instanceof Rechazada)) throw e; }
+  try { return await conAlgunModelo(`${prompt}. ${SUAVE}`, estilo.formato, claves.OPENAI_API_KEY); }
+  catch (e) {
+    if (e instanceof Rechazada) throw new Error(`el filtro de contenido de OpenAI la rechazó (${e.message}); prueba a cambiar la descripción`);
+    throw e;
+  }
+}
+
+async function comoDato(src) {
+  const blob = await (await fetch(src)).blob();
+  return new Promise((ok, mal) => {
+    const lector = new FileReader();
+    lector.onload = () => ok(lector.result);
+    lector.onerror = () => mal(lector.error);
+    lector.readAsDataURL(blob);
+  });
 }
 
 async function cargarImagen(src) {
@@ -250,7 +312,7 @@ async function cargarImagen(src) {
 async function animar(escena, proyecto, claves) {
   const r = await falPost("fal-ai/kling-video/v2.1/standard/image-to-video", {
     prompt: `${escena.prompt_visual}, ${estiloDe(proyecto).prompt}, smooth camera motion`,
-    image_url: escena.url, duration: "5",
+    image_url: escena.url || await comoDato(escena.src), duration: "5",  // las de OpenAI no tienen URL
   }, claves.FAL_KEY);
   const v = document.createElement("video");
   v.muted = true; v.loop = true; v.playsInline = true;
@@ -366,20 +428,36 @@ async function dirigir(proyecto, guion, claves) {
 // ---------- Storyboard (fase 1) ----------
 
 async function crearImagen(proyecto, i, claves, sesion) {
-  const e = proyecto.escenas[i], estilo = estiloDe(proyecto);
+  const e = proyecto.escenas[i];
+  let estilo = estiloDe(proyecto), falloOpenAI = null;
   Object.assign(e, { aviso: null, respaldo_de: null });
-  if (!claves.FAL_KEY) {
+  if (estilo.modelo === "openai" && claves.OPENAI_API_KEY) {
+    try {
+      const blob = await sesion.llamar("openai", () => imagenOpenAI(e, proyecto, claves));
+      const src = URL.createObjectURL(blob);
+      Object.assign(e, { fuente: await cargarImagen(src), src, url: null, estado: "ia" });  // sin URL: si se anima, se envía la imagen
+      e.version = (e.version || 0) + 1;
+      return;
+    } catch (err) {
+      console.error(err);
+      falloOpenAI = `OpenAI no pudo crear la imagen: ${err.message}`;  // si hay clave de fal, se intenta con Flux
+    }
+  }
+  if (!claves.FAL_KEY && falloOpenAI) {
+    Object.assign(e, { fuente: null, src: null, url: null, estado: "fallida", aviso: falloOpenAI });
+  } else if (!claves.FAL_KEY) {
     e.fuente = tarjetaDemo(e.prompt_visual, estilo, i + 1);
     Object.assign(e, { src: e.fuente.toDataURL("image/jpeg", 0.8), url: null, estado: "demo" });
   } else {
     try {
       const url = await sesion.llamar("imagen", () => imagenIA(e, proyecto, claves));
       const src = await conReintentos(() => urlLocal(url));
-      Object.assign(e, { fuente: await cargarImagen(src), src, url, estado: "ia" });
+      Object.assign(e, { fuente: await cargarImagen(src), src, url, estado: "ia",
+                         aviso: falloOpenAI && `${falloOpenAI}. Se hizo con Flux.` });
     } catch (err) {
       console.error(err);
       Object.assign(e, { fuente: null, src: null, url: null, estado: "fallida",
-                         aviso: `No se pudo crear la imagen: ${err.message}` });
+                         aviso: falloOpenAI || `No se pudo crear la imagen: ${err.message}` });
     }
   }
   e.version = (e.version || 0) + 1;

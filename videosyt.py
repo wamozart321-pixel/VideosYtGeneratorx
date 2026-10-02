@@ -21,22 +21,24 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from proveedores import clip_video, director, guion, imagen, montaje, voz
+from proveedores import clip_video, director, guion, imagen, montaje, openai_imagen, voz
 from proveedores.reintentos import ErrorDeCuenta, Proveedores, con_reintentos
 
 TAMANOS = {"16:9": (1920, 1080), "9:16": (1080, 1920)}  # 1080p
 AQUI = os.path.dirname(os.path.abspath(__file__))
 CLAVES = {"voz": "ELEVENLABS_API_KEY", "imagen": "FAL_KEY"}
-NOMBRES = {"imagen": "fal.ai (imágenes)", "voz": "ElevenLabs (voz)", "video": "fal.ai (Kling)"}
+NOMBRES = {"imagen": "fal.ai (imágenes)", "openai": "OpenAI (imágenes)", "voz": "ElevenLabs (voz)",
+           "video": "fal.ai (Kling)"}
 # Cuántas llamadas simultáneas acepta cada API sin devolver 429.
-LIMITES = {"imagen": 4, "voz": 2, "video": 2}  # el plan gratis de ElevenLabs admite 2 a la vez
+LIMITES = {"imagen": 4, "openai": 3, "voz": 2, "video": 2}  # el plan gratis de ElevenLabs admite 2 a la vez
 MONTAJES_A_LA_VEZ = max(1, min(4, (os.cpu_count() or 2) // 2))
 
 
 FUENTES = {"sans": "fuentes/DejaVuSans-Bold.ttf", "serif": "fuentes/DejaVuSerif-Bold.ttf"}
 FORMATOS = ("16:9", "9:16")
-# Calidad de imagen → modelo de fal.ai (precio aproximado por imagen en la descripción de la interfaz).
-CALIDADES = {"rapida": "fal-ai/flux/schnell", "buena": "fal-ai/flux/dev", "maxima": "fal-ai/flux-pro/v1.1"}
+# Calidad de imagen → modelo de fal.ai, u OpenAI (precio aproximado por imagen en la descripción de la interfaz).
+CALIDADES = {"rapida": "fal-ai/flux/schnell", "buena": "fal-ai/flux/dev", "maxima": "fal-ai/flux-pro/v1.1",
+             "openai": "openai"}
 ESCENA_DE_MUESTRA = ("sitting at a desk late at night, focused and determined",
                      "a desk with an open notebook and a warm lamp late at night")
 
@@ -68,7 +70,13 @@ def vista_previa(id_estilo, destino):
 
 
 def modo():
-    return {paso: bool(os.environ.get(k)) for paso, k in CLAVES.items()}
+    activos = {paso: bool(os.environ.get(k)) for paso, k in CLAVES.items()}
+    activos["imagen"] = activos["imagen"] or bool(os.environ.get("OPENAI_API_KEY"))
+    return activos
+
+
+def _con_openai(estilo):
+    return estilo["modelo"] == "openai" and bool(os.environ.get("OPENAI_API_KEY"))
 
 
 # ---------- proyecto ----------
@@ -149,20 +157,46 @@ def _avisar_bloqueos(proyecto, proveedores):
 
 # ---------- fase 1: storyboard ----------
 
+def _imagen_openai(prompt, estilo, destino, biblia):
+    """Como imagen.generar pero con OpenAI; si su filtro la rechaza, se pide una versión más suave."""
+    texto = imagen.componer_prompt(prompt, estilo, biblia)
+    try:
+        openai_imagen.generar(texto, estilo["formato"], destino)
+    except openai_imagen.Rechazada:
+        try:
+            openai_imagen.generar(f"{texto}. {imagen.SUAVE}", estilo["formato"], destino)
+        except openai_imagen.Rechazada as e:
+            raise imagen.ImagenBloqueada(f"el filtro de contenido de OpenAI la rechazó ({e}); "
+                                         "prueba a cambiar la descripción") from e
+
+
 def _imagen_escena(proyecto, i, estilo, proveedores, semaforos, semilla=None):
     e = proyecto["escenas"][i]
     destino = os.path.join(proyecto["carpeta"], e["imagen"])
     e["aviso"] = None
+    biblia = proyecto["biblia"] if e.get("personaje", True) else ""
+    fallo_openai = None
+    if _con_openai(estilo):
+        try:
+            _llamar("openai", proveedores, semaforos, _imagen_openai, e["prompt_visual"], estilo, destino, biblia)
+            e.update(url=None, estado_imagen="ia")  # sin URL: si se anima, se envía el archivo
+            e["version"] += 1
+            return
+        except Exception as error:  # noqa: BLE001  (si hay clave de fal, se intenta con Flux)
+            fallo_openai = f"OpenAI no pudo crear la imagen: {error}"
+    if estilo["modelo"] == "openai":  # sin clave de OpenAI o si falló: Flux dev
+        estilo = {**estilo, "modelo": CALIDADES["buena"]}
     if os.environ.get("FAL_KEY"):
         try:
             if semilla is None:  # proyectos anteriores no guardaban una semilla por escena
                 semilla = e.get("semilla", (proyecto["semilla"] + i + 1) % 2**31)
-            biblia = proyecto["biblia"] if e.get("personaje", True) else ""
             e["url"] = _llamar("imagen", proveedores, semaforos, imagen.generar, e["prompt_visual"], estilo,
                                destino, biblia, semilla)
-            e["estado_imagen"] = "ia"
+            e.update(estado_imagen="ia", aviso=fallo_openai and f"{fallo_openai}. Se hizo con Flux.")
         except Exception as error:  # noqa: BLE001  (cualquier fallo de la API → respaldo)
-            e.update(url=None, estado_imagen="fallida", aviso=f"No se pudo crear la imagen: {error}")
+            e.update(url=None, estado_imagen="fallida", aviso=fallo_openai or f"No se pudo crear la imagen: {error}")
+    elif fallo_openai:
+        e.update(url=None, estado_imagen="fallida", aviso=fallo_openai)
     else:
         imagen.tarjeta_demo(e["prompt_visual"], estilo, TAMANOS[estilo["formato"]], destino, i + 1)
         e.update(url=None, estado_imagen="demo")
@@ -278,9 +312,12 @@ def renderizar(proyecto, salida, avisar=lambda *_: None):
 
     def tarea_clip(i):
         e, destino = escenas[i], os.path.join(carpeta, f"escena{i + 1:02d}_clip.mp4")
-        if e.get("url"):
+        fuente = e.get("url")
+        if not fuente and (e["estado_imagen"] == "ia" or e.get("respaldo_de")):
+            fuente = clip_video.como_dato(os.path.join(carpeta, e["imagen"]))  # imagen de OpenAI: no tiene URL
+        if fuente:
             try:
-                _llamar("video", proveedores, semaforos, clip_video.animar, e["url"], e["prompt_visual"],
+                _llamar("video", proveedores, semaforos, clip_video.animar, fuente, e["prompt_visual"],
                         estilo, destino, intentos=2)
                 animados[i] = destino
             except Exception as error:  # noqa: BLE001  (respaldo: imagen con zoom)

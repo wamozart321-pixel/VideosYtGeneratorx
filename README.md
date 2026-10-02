@@ -39,7 +39,9 @@ nada se publica en internet. Para cerrar la app, cierra la ventana negra de la t
 #### Ritmo, calidad y subtítulos
 
 - **Escenas por minuto**: los párrafos largos se parten por oraciones. Pocas ≈ 6, Normal ≈ 12 y Muchas ≈ 18 escenas por minuto.
-- **Calidad de imagen**: Rápida (Flux schnell), Buena (Flux dev, por defecto) o Máxima (Flux 1.1 pro).
+- **Calidad de imagen**: Rápida (Flux schnell), Buena (Flux dev, por defecto), Máxima (Flux 1.1 pro) o ChatGPT
+  (modelos de imagen de OpenAI). ChatGPT necesita una clave de API de OpenAI (platform.openai.com), que se
+  paga aparte del plan ChatGPT Plus; si falla y hay clave de fal.ai, la escena se hace con Flux dev.
 - **Subtítulos**: frases cortas de máximo dos líneas que cambian con la voz. Se pueden quitar.
 - Para imágenes más precisas, pide a Scripzy una línea `Imagen:` en inglés por párrafo.
 
