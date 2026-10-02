@@ -573,30 +573,65 @@ $("#irMisVideos").onclick = () => { pintarHistorial(); $("#misVideos").scrollInt
 pintarHistorial();
 
 function base64(b) {
-  return new Promise(ok => { const r = new FileReader(); r.onload = () => ok(r.result.split(",")[1]); r.readAsDataURL(b); });
+  return new Promise((ok, mal) => {
+    const r = new FileReader();
+    r.onload = () => ok(r.result.split(",")[1]); r.onerror = () => mal(r.error);
+    r.readAsDataURL(b);
+  });
+}
+
+/**
+ * Escribe el video por partes. Pasarlo entero de una vez (decenas de MB en texto base64)
+ * agotaba la memoria y Android cerraba la app.
+ */
+async function escribirPorPartes(b, path, directory) {
+  const { Filesystem } = Plugins, PARTE = 3 * 1024 * 1024;  // múltiplo de 3: el base64 de cada parte no lleva relleno
+  for (let desde = 0; desde < b.size || desde === 0; desde += PARTE) {
+    const data = await base64(b.slice(desde, desde + PARTE));
+    if (desde === 0) await Filesystem.writeFile({ path, data, directory, recursive: true });
+    else await Filesystem.appendFile({ path, data, directory });
+    $("#guardado").textContent = `Guardando… ${Math.min(100, Math.round(100 * (desde + PARTE) / b.size))}%`;
+    if (b.size === 0) break;
+  }
+  return Filesystem.getUri({ path, directory });
 }
 
 $("#compartir").onclick = async () => {
-  if (archivoActual) {  // ya está guardado en Documentos/Videosyt: solo se comparte
-    try { await Plugins.Share.share({ title: "Mi video de Videosyt", files: [archivoActual.uri] }); } catch { /* cerró el menú */ }
-    return;
-  }
-  const ext = blob.type.includes("mp4") ? "mp4" : "webm";
-  const nombre = `videosyt-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.${ext}`;
-  if (!Plugins.Filesystem) {  // en un navegador normal: descarga directa
-    const a = document.createElement("a"); a.href = $("#video").src; a.download = nombre; a.click(); return;
-  }
-  const { Filesystem, Share } = Plugins, data = await base64(blob);
-  let guardado;
+  const boton = $("#compartir");
+  boton.disabled = true;
   try {
-    guardado = await Filesystem.writeFile({ path: `Videosyt/${nombre}`, data, directory: "DOCUMENTS", recursive: true });
-    $("#guardado").textContent = `Guardado en Documentos/Videosyt/${nombre}`;
-    if (idActual) marcarArchivo(idActual, nombre).catch(console.error);
-  } catch {
-    guardado = await Filesystem.writeFile({ path: nombre, data, directory: "CACHE" });
+    if (archivoActual) {  // ya está guardado en Documentos/Videosyt: solo se comparte
+      await compartir(archivoActual.uri);
+      return;
+    }
+    const ext = blob.type.includes("mp4") ? "mp4" : "webm";
+    const nombre = `videosyt-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.${ext}`;
+    if (!Plugins.Filesystem) {  // en un navegador normal: descarga directa
+      const a = document.createElement("a"); a.href = $("#video").src; a.download = nombre; a.click(); return;
+    }
+    let guardado;
+    try {
+      guardado = await escribirPorPartes(blob, `Videosyt/${nombre}`, "DOCUMENTS");
+      $("#guardado").textContent = `Guardado en Documentos/Videosyt/${nombre}`;
+      if (idActual) marcarArchivo(idActual, nombre).catch(console.error);
+    } catch (e) {
+      console.error(e);  // sin permiso para Documentos: se guarda en la app solo para compartirlo
+      guardado = await escribirPorPartes(blob, nombre, "CACHE");
+      $("#guardado").textContent = "Elige dónde guardarlo o con quién compartirlo.";
+    }
+    await compartir(guardado.uri);
+  } catch (e) {
+    console.error(e);
+    $("#guardado").textContent = `No se pudo guardar: ${e.message || e}`;
+  } finally {
+    boton.disabled = false;
   }
-  try { await Share.share({ title: "Mi video de Videosyt", files: [guardado.uri] }); } catch { /* el usuario cerró el menú */ }
 };
+
+async function compartir(uri) {
+  try { await Plugins.Share.share({ title: "Mi video de Videosyt", files: [uri] }); }
+  catch { /* el usuario cerró el menú */ }
+}
 
 $("#otro").onclick = () => {
   $("#resultado").classList.add("oculto"); $("#storyboard").classList.add("oculto");
