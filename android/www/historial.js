@@ -54,3 +54,15 @@ export function borrarVideo(id) {
     tx.objectStore("archivos").delete(id);
   });
 }
+
+/** Anota el nombre con que se guardó en Documentos/Videosyt, para no listarlo dos veces. */
+export async function marcarArchivo(id, archivo) {
+  const db = await abrir();
+  return new Promise((ok, mal) => {
+    const tx = db.transaction(["videos"], "readwrite"), almacen = tx.objectStore("videos");
+    const pedido = almacen.get(id);
+    pedido.onsuccess = () => { if (pedido.result) almacen.put({ ...pedido.result, archivo }); };
+    tx.oncomplete = () => { db.close(); ok(); };
+    tx.onerror = tx.onabort = () => { db.close(); mal(tx.error); };
+  });
+}
