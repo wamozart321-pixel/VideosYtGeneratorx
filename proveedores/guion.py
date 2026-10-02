@@ -1,42 +1,45 @@
-"""Paso 1: convierte el guion en escenas (texto narrado + prompt visual)."""
-import json
-import os
+"""Paso 1: divide el guion en escenas, sin IA.
 
-from .http import post
+Pensado para guiones escritos en Scripzy u otra herramienta: cada párrafo es una
+escena. Dentro de un párrafo se reconocen indicaciones visuales opcionales:
 
-INSTRUCCIONES = """Divide este guion en escenas para un video.
-Estilo visual: {estilo}
-Devuelve SOLO un JSON: una lista de objetos con
-"narracion" (texto que se lee en voz alta, en el idioma del guion) y
-"prompt_visual" (descripción en inglés de la imagen de esa escena, sin texto escrito en la imagen).
+    Imagen: un niño mira el amanecer desde una ventana
+    [plano general de una ciudad de noche]
 
-Guion:
-{guion}"""
+Esas líneas se usan como descripción de la imagen y no se narran. Las etiquetas
+como "Escena 3" se ignoran, y prefijos como "Narrador:" se quitan.
+"""
+import re
 
-
-def escenas(guion, estilo):
-    clave = os.environ.get("ANTHROPIC_API_KEY")
-    if not clave:
-        return _escenas_demo(guion)
-    r = post(
-        "https://api.anthropic.com/v1/messages",
-        {"x-api-key": clave, "anthropic-version": "2023-06-01"},
-        {
-            "model": os.environ.get("CLAUDE_MODEL") or "claude-sonnet-5-5",
-            "max_tokens": 4000,
-            "messages": [{"role": "user", "content": INSTRUCCIONES.format(
-                estilo=estilo["prompt_imagen"], guion=guion)}],
-        },
-    )
-    # La respuesta puede traer varios bloques (por ejemplo de razonamiento); se usan solo los de texto.
-    texto = "".join(b["text"] for b in r.get("content", []) if b.get("type") == "text")
-    inicio, fin = texto.find("["), texto.rfind("]")
-    if inicio < 0 or fin < inicio:
-        raise ValueError("Claude no devolvió la lista de escenas. Intenta de nuevo.")
-    return json.loads(texto[inicio: fin + 1])
+VISUAL = re.compile(r"^\s*(?:visual|imagen|image|prompt|toma|plano)\s*:\s*(.+)$", re.I)
+CORCHETES = re.compile(r"^\s*[\[(](.+)[\])]\s*$")
+ETIQUETA = re.compile(r"^\s*(?:escena|scene|parte|part)\s*\d+\s*[:.\-–—]?\s*$", re.I)
+NARRADOR = re.compile(r"^\s*(?:narrador|narraci[oó]n|voz(?: en off)?|locutor|narrator)\s*:\s*", re.I)
 
 
-def _escenas_demo(guion):
-    # Sin API: un párrafo = una escena.
-    parrafos = [p.strip() for p in guion.split("\n\n") if p.strip()]
-    return [{"narracion": p, "prompt_visual": p} for p in parrafos]
+def escenas(texto):
+    resultado, visual_pendiente = [], None
+    for parrafo in re.split(r"\n\s*\n", texto.strip()):
+        narracion, visuales = [], []
+        for linea in parrafo.splitlines():
+            if not linea.strip() or ETIQUETA.match(linea):
+                continue
+            m = VISUAL.match(linea) or CORCHETES.match(linea)
+            if m:
+                visuales.append(m.group(1).strip())
+            else:
+                narracion.append(NARRADOR.sub("", linea).strip())
+        if visual_pendiente:
+            visuales.insert(0, visual_pendiente)
+            visual_pendiente = None
+        if not narracion:
+            # Un párrafo solo con indicación visual describe la escena siguiente.
+            visual_pendiente = " ".join(visuales) or None
+            continue
+        texto_escena = " ".join(narracion)
+        resultado.append({
+            "narracion": texto_escena,
+            "prompt_visual": " ".join(visuales) or texto_escena,
+            "visual_propio": bool(visuales),
+        })
+    return resultado

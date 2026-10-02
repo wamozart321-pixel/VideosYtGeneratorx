@@ -54,6 +54,28 @@
            width: calc(100% - 32px); max-width: 520px; padding: 16px; }
   dialog::backdrop { background: rgba(0,0,0,.5); }
   .estado-clave { font-size: 12px; } .estado-clave.on { color: var(--ok); } .estado-clave.off { color: var(--muted); }
+  .quitar { font-size: 12px; padding: 2px 8px; margin-left: 6px; border-radius: 8px; }
+  textarea.corto { min-height: 70px; }
+  .avisos { background: color-mix(in srgb, var(--accent) 12%, transparent); border-radius: 10px;
+            padding: 10px 12px; font-size: 14px; margin-bottom: 12px; }
+  .avisos p { margin: 0; } .avisos p + p { margin-top: 6px; }
+  .tablero { display: grid; gap: 12px; }
+  .escena { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--soft); }
+  .foto { position: relative; aspect-ratio: 16 / 9; background: #000; }
+  .tablero.vertical .foto { aspect-ratio: 9 / 16; max-height: 60vh; margin: 0 auto; }
+  .foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .foto.cargando img { opacity: .35; }
+  .num, .insignia { position: absolute; top: 8px; font-size: 12px; font-weight: 700; color: #fff;
+                    border-radius: 99px; padding: 2px 8px; }
+  .num { left: 8px; background: rgba(0,0,0,.6); }
+  .insignia { right: 8px; background: var(--ok); }
+  .insignia.respaldo { background: #c27c0e; } .insignia.demo { background: #555; }
+  .escena .cuerpo { padding: 10px; }
+  .escena textarea { min-height: 70px; background: var(--panel); }
+  .escena details { margin-top: 8px; font-size: 14px; color: var(--muted); }
+  .escena details textarea { margin-top: 6px; color: var(--text); }
+  .escena .aviso { font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .escena .acciones { margin-top: 8px; } .escena .acciones button { font-size: 14px; padding: 8px; }
 </style>
 </head>
 <body>
@@ -67,23 +89,36 @@
     <h2>Nuevo video</h2>
     <div class="ayuda" id="modo"></div>
     <label class="t" for="guion">Guion</label>
-    <textarea id="guion" placeholder="Escribe o pega tu guion. Cada párrafo será una escena."></textarea>
+    <textarea id="guion" placeholder="Pega tu guion de Scripzy. Cada párrafo será una escena."></textarea>
     <div class="ayuda" id="conteo">0 palabras</div>
+    <div class="ayuda">Tip: una línea <b>Imagen: …</b> o <b>[…]</b> dentro del párrafo describe la imagen y no se lee en voz alta.</div>
+    <label class="t" for="biblia">Personajes y estilo fijo <small class="ayuda">(opcional)</small></label>
+    <textarea id="biblia" class="corto" placeholder="Ej.: a small blue robot with round eyes, warm sunset palette"></textarea>
+    <div class="ayuda">Se agrega igual a todas las imágenes para que el personaje y el estilo no cambien. Mejor en inglés.</div>
     <label class="t">Estilo</label>
     <div class="estilos" id="estilos"></div>
     <label class="check">
       <input type="checkbox" id="clips">
       <span>Animar cada escena con video IA (Kling)<br><small class="ayuda">Más lento y caro. Requiere la clave de fal.ai.</small></span>
     </label>
-    <button class="primario" id="generar">Generar video</button>
+    <button class="primario" id="generar">Crear storyboard</button>
+    <div class="ayuda">Primero verás las imágenes de cada escena. La voz y el video se crean solo cuando las apruebes.</div>
     <div class="error" id="error"></div>
   </section>
 
+  <section class="card oculto" id="storyboard">
+    <h2 id="tituloTablero">Storyboard</h2>
+    <div class="avisos oculto" id="avisos"></div>
+    <div class="tablero" id="tablero"></div>
+    <button class="primario" id="render">Crear video</button>
+    <div class="ayuda">Se generarán las voces y se montará el video.</div>
+  </section>
+
   <section class="card oculto" id="progreso">
-    <div class="fila"><b>Creando tu video…</b><span id="pct">0%</span></div>
+    <div class="fila"><b id="tituloProgreso">Creando tu video…</b><span id="pct">0%</span></div>
     <div class="barra"><div id="barra"></div></div>
     <div class="ayuda" id="mensaje"></div>
-    <div class="ayuda">Mantén la app abierta y la pantalla encendida mientras se monta.</div>
+    <div class="ayuda" id="pantalla">Mantén la app abierta y la pantalla encendida mientras se monta.</div>
     <canvas id="lienzo" style="margin-top:12px"></canvas>
   </section>
 
@@ -92,8 +127,10 @@
     <video id="video" controls playsinline></video>
     <div class="acciones">
       <button id="compartir">Guardar / Compartir</button>
+      <button id="volver">Volver al storyboard</button>
       <button id="otro">Crear otro</button>
     </div>
+    <div class="avisos oculto" id="avisosVideo" style="margin-top:12px"></div>
     <div class="ayuda" id="guardado"></div>
   </section>
 </main>
@@ -109,24 +146,23 @@
 </dialog>
 
 <script type="module">
-import { ESTILOS, crearVideo } from "./motor.js";
+import { ESTILOS, escenas, crearStoryboard, regenerarEscena, renderizar } from "./motor.js";
 
 const $ = s => document.querySelector(s);
 const CAMPOS = [
-  ["ANTHROPIC_API_KEY", "Claude (guion y escenas)", "console.anthropic.com", true],
   ["ELEVENLABS_API_KEY", "ElevenLabs (voz)", "elevenlabs.io", true],
   ["FAL_KEY", "fal.ai (imágenes y video)", "fal.ai", true],
   ["ELEVENLABS_VOICE_ID", "ID de voz de ElevenLabs (opcional)", "", false],
 ];
 const Plugins = window.Capacitor?.Plugins || {};
-let estilo = "cinematico", blob = null;
+let estilo = "cinematico", blob = null, proyecto = null, pendientes = 0;
 
 function claves() {
   try { return JSON.parse(localStorage.getItem("claves") || "{}"); } catch { return {}; }
 }
 
 function pintarModo() {
-  const c = claves(), activos = [["ANTHROPIC_API_KEY", "Guion"], ["ELEVENLABS_API_KEY", "Voz"], ["FAL_KEY", "Imágenes"]]
+  const c = claves(), activos = [["ELEVENLABS_API_KEY", "Voz"], ["FAL_KEY", "Imágenes"]]
     .filter(([k]) => c[k]).map(([, n]) => n);
   $("#modo").textContent = activos.length ? "IA activa: " + activos.join(", ") : "Modo demo (sin claves de IA)";
   $("#clips").disabled = !c.FAL_KEY;
@@ -147,36 +183,123 @@ function pintarEstilos() {
 
 $("#guion").addEventListener("input", e => {
   const t = e.target.value.trim(), p = t ? t.split(/\s+/).length : 0;
-  const n = t ? t.split(/\n\s*\n/).filter(x => x.trim()).length : 0;
+  const n = t ? escenas(t).length : 0;
   $("#conteo").textContent = `${p} palabras · ${n} escena${n === 1 ? "" : "s"} · ~${Math.round(p / 2.5)} s de video`;
 });
+
+function progreso(titulo, pantalla) {
+  $("#tituloProgreso").textContent = titulo;
+  $("#pantalla").classList.toggle("oculto", !pantalla);
+  $("#pct").textContent = "0%"; $("#barra").style.width = "0"; $("#mensaje").textContent = "";
+  $("#lienzo").classList.toggle("oculto", !pantalla);
+  $("#progreso").classList.remove("oculto");
+}
+const avisar = (pct, msg) => { $("#pct").textContent = pct + "%"; $("#barra").style.width = pct + "%"; $("#mensaje").textContent = msg; };
+
+function pintarAvisos(caja, avisos) {
+  caja.innerHTML = "";
+  for (const a of avisos) { const p = document.createElement("p"); p.textContent = a; caja.appendChild(p); }
+  caja.classList.toggle("oculto", !avisos.length);
+}
+
+function insignia(e) {
+  if (e.estado === "ia") return ["IA", ""];
+  if (e.estado === "demo") return ["Demo", "demo"];
+  return [e.respaldo_de ? `Respaldo (de escena ${e.respaldo_de})` : "Respaldo", "respaldo"];
+}
+
+function pintarTablero() {
+  const cont = $("#tablero"), lista = proyecto.escenas;
+  $("#tituloTablero").textContent = `Storyboard · ${lista.length} escena${lista.length === 1 ? "" : "s"}`;
+  cont.classList.toggle("vertical", ESTILOS[proyecto.estilo].formato === "9:16");
+  const respaldos = lista.filter(e => e.estado === "respaldo").length;
+  pintarAvisos($("#avisos"), [...proyecto.avisos,
+    ...(respaldos ? [`${respaldos} escena(s) usan una imagen de respaldo. Puedes regenerarlas antes de crear el video.`] : [])]);
+  cont.innerHTML = "";
+  lista.forEach((e, i) => {
+    const [texto, clase] = insignia(e);
+    const d = document.createElement("div");
+    d.className = "escena";
+    d.innerHTML = `<div class="foto"><img alt=""><span class="num">${i + 1}</span>
+        <span class="insignia ${clase}"></span></div>
+      <div class="cuerpo">
+        <textarea class="narracion" aria-label="Narración de la escena ${i + 1}"></textarea>
+        <details><summary>Descripción de la imagen</summary><textarea class="visual"></textarea></details>
+        <div class="aviso"></div>
+        <div class="acciones"><button class="regenerar">Regenerar imagen</button></div>
+      </div>`;
+    d.querySelector("img").src = e.src || "";
+    d.querySelector(".insignia").textContent = texto;
+    d.querySelector(".aviso").textContent = e.aviso || "";
+    const narracion = d.querySelector(".narracion"), visual = d.querySelector(".visual");
+    narracion.value = e.narracion; visual.value = e.prompt_visual;
+    narracion.oninput = () => { e.narracion = narracion.value; };
+    visual.oninput = () => { e.prompt_visual = visual.value; };
+    d.querySelector(".regenerar").onclick = async ev => {
+      const b = ev.target;
+      b.disabled = true; b.textContent = "Creando…"; d.querySelector(".foto").classList.add("cargando");
+      pendientes++; $("#render").disabled = true;
+      try { await regenerarEscena(proyecto, i, claves()); }
+      finally { pendientes--; $("#render").disabled = pendientes > 0; }
+      pintarTablero();
+    };
+    cont.appendChild(d);
+  });
+}
+
+function verTablero() {
+  $("#resultado").classList.add("oculto");
+  $("#storyboard").classList.remove("oculto");
+  $("#storyboard").scrollIntoView({ behavior: "smooth" });
+}
 
 $("#generar").onclick = async () => {
   const guion = $("#guion").value.trim();
   $("#error").textContent = "";
   if (!guion) { $("#error").textContent = "El guion está vacío"; return; }
-  const audio = new AudioContext();
-  await audio.resume();
   $("#generar").disabled = true;
-  $("#progreso").classList.remove("oculto"); $("#resultado").classList.add("oculto");
+  $("#storyboard").classList.add("oculto"); $("#resultado").classList.add("oculto");
+  progreso("Creando las imágenes…", false);
   try {
-    blob = await crearVideo({
-      guion, estilo, clips: $("#clips").checked, claves: claves(), audio, lienzo: $("#lienzo"),
-      avisar: (pct, msg) => { $("#pct").textContent = pct + "%"; $("#barra").style.width = pct + "%"; $("#mensaje").textContent = msg; },
-    });
-    $("#video").src = URL.createObjectURL(blob);
-    $("#guardado").textContent = "";
-    $("#resultado").classList.remove("oculto");
-    $("#resultado").scrollIntoView({ behavior: "smooth" });
+    proyecto = await crearStoryboard({ guion, estilo, biblia: $("#biblia").value, claves: claves(), avisar });
+    pintarTablero();
+    $("#progreso").classList.add("oculto");
+    verTablero();
   } catch (e) {
     console.error(e);
     $("#error").textContent = "No se pudo crear: " + e.message;
   } finally {
     $("#progreso").classList.add("oculto");
     $("#generar").disabled = false;
+  }
+};
+
+$("#render").onclick = async () => {
+  if (proyecto.escenas.some(e => !e.narracion.trim())) { alert("Hay una escena sin texto para narrar"); return; }
+  const audio = new AudioContext();
+  await audio.resume();
+  $("#render").disabled = $("#generar").disabled = true;
+  $("#storyboard").classList.add("oculto"); $("#resultado").classList.add("oculto");
+  progreso("Creando tu video…", true);
+  try {
+    blob = await renderizar({ proyecto, clips: $("#clips").checked, claves: claves(), audio, lienzo: $("#lienzo"), avisar });
+    $("#video").src = URL.createObjectURL(blob);
+    $("#guardado").textContent = "";
+    pintarAvisos($("#avisosVideo"), proyecto.avisos);
+    $("#resultado").classList.remove("oculto");
+    $("#resultado").scrollIntoView({ behavior: "smooth" });
+  } catch (e) {
+    console.error(e);
+    $("#storyboard").classList.remove("oculto");
+    pintarAvisos($("#avisos"), ["No se pudo crear el video: " + e.message]);
+  } finally {
+    $("#progreso").classList.add("oculto");
+    $("#render").disabled = $("#generar").disabled = false;
     audio.close();
   }
 };
+
+$("#volver").onclick = () => { pintarTablero(); verTablero(); };
 
 function base64(b) {
   return new Promise(ok => { const r = new FileReader(); r.onload = () => ok(r.result.split(",")[1]); r.readAsDataURL(b); });
@@ -199,27 +322,38 @@ $("#compartir").onclick = async () => {
   try { await Share.share({ title: "Mi video de Videosyt", files: [guardado.uri] }); } catch { /* el usuario cerró el menú */ }
 };
 
-$("#otro").onclick = () => { $("#resultado").classList.add("oculto"); window.scrollTo({ top: 0, behavior: "smooth" }); };
+$("#otro").onclick = () => {
+  $("#resultado").classList.add("oculto"); $("#storyboard").classList.add("oculto");
+  proyecto = null; window.scrollTo({ top: 0, behavior: "smooth" });
+};
 
 $("#abrirConfig").onclick = () => {
   const c = claves(), cont = $("#campos"); cont.innerHTML = "";
   for (const [k, nombre, sitio, secreta] of CAMPOS) {
     const d = document.createElement("div");
     d.innerHTML = `<div class="fila"><label class="t" for="${k}">${nombre}</label>
-      <span class="estado-clave ${c[k] ? "on" : "off"}">${c[k] ? "configurada" : "sin configurar"}</span></div>
+      <span class="estado-clave ${c[k] ? "on" : "off"}">${c[k] ? "configurada" : "sin configurar"}
+        ${secreta && c[k] ? '<button type="button" class="quitar">Quitar</button>' : ""}</span></div>
       <input id="${k}" type="${secreta ? "password" : "text"}" autocomplete="off" ${secreta ? 'placeholder="Deja vacío para no cambiarla"' : ""}>
       ${sitio ? `<div class="ayuda">Se obtiene en ${sitio}</div>` : ""}`;
     if (!secreta) d.querySelector("input").value = c[k] || "";
+    const quitar = d.querySelector(".quitar");
+    if (quitar) quitar.onclick = () => marcarQuitar(d.querySelector("input"), quitar);
     cont.appendChild(d);
   }
   $("#config").showModal();
 };
+function marcarQuitar(input, boton) {
+  input.value = ""; input.dataset.quitar = "1";
+  input.placeholder = "Se quitará al guardar";
+  boton.textContent = "Se quitará"; boton.disabled = true;
+}
 $("#cerrarConfig").onclick = () => $("#config").close();
 $("#guardarConfig").onclick = () => {
   const c = claves();
   for (const [k, , , secreta] of CAMPOS) {
     const v = $("#" + k).value.trim();
-    if (!secreta || v) { if (v) c[k] = v; else delete c[k]; }
+    if (!secreta || v || $("#" + k).dataset.quitar) { if (v) c[k] = v; else delete c[k]; }
   }
   localStorage.setItem("claves", JSON.stringify(c));
   $("#config").close(); pintarModo();

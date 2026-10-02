@@ -9,24 +9,28 @@ from .http import descargar, post
 from .montaje import ruta_filtro
 
 
-def generar(prompt, estilo, tamano, destino, numero):
-    clave = os.environ.get("FAL_KEY")
-    if clave:
-        modelo = os.environ.get("FAL_IMAGE_MODEL", "fal-ai/flux/schnell")
-        r = post(
-            f"https://fal.run/{modelo}",
-            {"authorization": f"Key {clave}"},
-            {"prompt": f"{prompt}, {estilo['prompt_imagen']}",
-             "image_size": "portrait_16_9" if estilo["formato"] == "9:16" else "landscape_16_9"},
-        )
-        url = r["images"][0]["url"]
-        descargar(url, destino)
-        return url
-    _tarjeta_demo(prompt, estilo, tamano, destino, numero)
-    return None
+def componer_prompt(prompt, estilo, biblia=""):
+    """La biblia visual va primero y es idéntica en todas las escenas; así se mantiene el estilo."""
+    partes = [biblia.strip(), prompt.strip(), estilo["prompt_imagen"], "no text, no letters, no watermark"]
+    return ". ".join(p for p in partes if p)
 
 
-def _tarjeta_demo(prompt, estilo, tamano, destino, numero):
+def generar(prompt, estilo, destino, biblia="", semilla=None):
+    """Genera la imagen con Flux y devuelve su URL. Requiere FAL_KEY."""
+    cuerpo = {
+        "prompt": componer_prompt(prompt, estilo, biblia),
+        "image_size": "portrait_16_9" if estilo["formato"] == "9:16" else "landscape_16_9",
+    }
+    if semilla is not None:
+        cuerpo["seed"] = semilla  # misma semilla en todo el video = estilo más estable
+    modelo = os.environ.get("FAL_IMAGE_MODEL") or "fal-ai/flux/schnell"
+    r = post(f"https://fal.run/{modelo}", {"authorization": f"Key {os.environ['FAL_KEY']}"}, cuerpo)
+    url = r["images"][0]["url"]
+    descargar(url, destino)
+    return url
+
+
+def tarjeta_demo(prompt, estilo, tamano, destino, numero):
     ancho, alto = tamano
     lado = min(ancho, alto)
     texto = destino + ".txt"

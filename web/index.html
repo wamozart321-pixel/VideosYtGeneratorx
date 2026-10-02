@@ -22,13 +22,13 @@
   .logo span { color: var(--accent); }
   .modo { font-size: 12px; color: var(--muted); }
   header button { margin-left: auto; }
-  main { max-width: 1200px; margin: 0 auto; padding: 24px 16px 64px; display: grid;
-         grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 20px; }
+  main { max-width: 1400px; margin: 0 auto; padding: 24px 16px 64px; display: grid;
+         grid-template-columns: minmax(0, 400px) minmax(0, 1fr); gap: 20px; align-items: start; }
   @media (max-width: 860px) { main { grid-template-columns: minmax(0, 1fr); } }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
   h2 { font-size: 15px; margin: 0 0 14px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
   label.t { display: block; font-weight: 600; margin: 16px 0 8px; }
-  textarea { width: 100%; min-height: 220px; resize: vertical; padding: 12px; border-radius: 10px;
+  textarea { width: 100%; min-height: 200px; resize: vertical; padding: 12px; border-radius: 10px;
              border: 1px solid var(--line); background: var(--soft); color: var(--text); font: inherit; }
   textarea:focus, input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   .ayuda { font-size: 13px; color: var(--muted); margin-top: 6px; }
@@ -71,8 +71,36 @@
   .fila { display: flex; justify-content: space-between; align-items: baseline; }
   .estado-clave { font-size: 12px; }
   .estado-clave.on { color: var(--ok); } .estado-clave.off { color: var(--muted); }
+  .quitar { font-size: 12px; padding: 2px 8px; margin-left: 6px; border-radius: 8px; }
   @media (max-width: 520px) { header { padding: 12px 16px; } .modo { display: none; } .card { padding: 16px; } }
-  .derecha { display: flex; flex-direction: column; gap: 20px; }
+  .izquierda { display: flex; flex-direction: column; gap: 20px; }
+  textarea.corta { min-height: 70px; }
+  .lista li { cursor: pointer; } .lista li.activo .titulo div { color: var(--accent); font-weight: 600; }
+  .avisos { background: color-mix(in srgb, var(--warn) 14%, transparent); border-radius: 10px; padding: 10px 12px;
+            font-size: 14px; margin-bottom: 14px; }
+  .avisos p { margin: 0; } .avisos p + p { margin-top: 4px; }
+  .tablero { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
+  .escena { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--soft);
+            display: flex; flex-direction: column; }
+  .escena .foto { position: relative; background: #000; }
+  .escena img { width: 100%; display: block; aspect-ratio: 16 / 9; object-fit: cover; }
+  .tablero.vertical { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+  .tablero.vertical .escena img { aspect-ratio: 9 / 16; }
+  .escena .num { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,.65); color: #fff;
+                 font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 99px; }
+  .escena .insignia { position: absolute; top: 8px; right: 8px; font-size: 11px; font-weight: 700;
+                      padding: 2px 8px; border-radius: 99px; background: rgba(0,0,0,.65); color: #fff; }
+  .insignia.ia { background: var(--ok); } .insignia.respaldo { background: var(--warn); }
+  .escena .cuerpo { padding: 10px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+  .escena textarea { min-height: 70px; padding: 8px; font-size: 14px; background: var(--panel); }
+  .escena details summary { font-size: 13px; color: var(--muted); cursor: pointer; }
+  .escena .botones { display: flex; gap: 6px; margin-top: auto; }
+  .escena .botones button { flex: 1; font-size: 13px; padding: 6px 8px; }
+  .escena.ocupada .foto::after { content: "Creando imagen…"; position: absolute; inset: 0; display: grid;
+                                  place-items: center; background: rgba(0,0,0,.55); color: #fff; font-size: 14px; }
+  .pie { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-top: 16px; flex-wrap: wrap; }
+  .pie button.primario { width: auto; margin: 0; }
+  .pill.storyboard_listo { color: var(--warn); }
 </style>
 </head>
 <body>
@@ -83,35 +111,41 @@
 </header>
 
 <main>
-  <section class="card">
-    <h2>Nuevo video</h2>
-    <label class="t" for="guion">Guion</label>
-    <textarea id="guion" placeholder="Escribe o pega tu guion aquí. Cada párrafo será una escena."></textarea>
-    <div class="ayuda" id="conteo">0 palabras</div>
-
-    <label class="t">Estilo</label>
-    <div class="estilos" id="estilos"></div>
-
-    <label class="check">
-      <input type="checkbox" id="clips">
-      <span>Animar cada escena con video IA (Kling)<br>
-        <small class="ayuda">Más realista pero más lento y caro. Requiere la clave de fal.ai.</small></span>
-    </label>
-
-    <button class="primario" id="generar">Generar video</button>
-    <div class="error" id="errorForm"></div>
-  </section>
-
-  <div class="derecha">
+  <div class="izquierda">
     <section class="card">
-      <h2>Vista previa</h2>
-      <div id="vista"><div class="vacio">Tu video aparecerá aquí.</div></div>
+      <h2>Nuevo video</h2>
+      <label class="t" for="guion">Guion</label>
+      <textarea id="guion" placeholder="Pega aquí tu guion (por ejemplo de Scripzy). Cada párrafo será una escena."></textarea>
+      <div class="ayuda" id="conteo">0 palabras</div>
+      <div class="ayuda">Opcional: una línea <code>Imagen: ...</code> o <code>[ ... ]</code> dentro de un párrafo describe la imagen de esa escena y no se narra.</div>
+
+      <label class="t" for="biblia">Personajes y estilo fijo <small class="ayuda">(opcional)</small></label>
+      <textarea id="biblia" class="corta" placeholder="Ej.: a young woman with short red hair, green jacket; warm orange and teal palette; soft morning light"></textarea>
+      <div class="ayuda">Se agrega igual a todas las imágenes para que el personaje y el estilo no cambien. Mejor en inglés.</div>
+
+      <label class="t">Estilo</label>
+      <div class="estilos" id="estilos"></div>
+
+      <label class="check">
+        <input type="checkbox" id="clips">
+        <span>Animar cada escena con video IA (Kling)<br>
+          <small class="ayuda">Más realista pero más lento y caro. Requiere la clave de fal.ai.</small></span>
+      </label>
+
+      <button class="primario" id="crear">Crear storyboard</button>
+      <div class="ayuda">Primero verás las imágenes de cada escena. La voz y el video se generan solo cuando lo apruebes.</div>
+      <div class="error" id="errorForm"></div>
     </section>
+
     <section class="card">
-      <h2>Mis videos</h2>
-      <ul class="lista" id="lista"><li><small>Todavía no has creado videos.</small></li></ul>
+      <h2>Mis proyectos</h2>
+      <ul class="lista" id="lista"><li><small>Todavía no has creado proyectos.</small></li></ul>
     </section>
   </div>
+
+  <section class="card" id="espacio">
+    <div class="vacio">Pega un guion y pulsa <b>Crear storyboard</b>.</div>
+  </section>
 </main>
 
 <dialog id="config">
@@ -128,12 +162,12 @@
 <script>
 const $ = s => document.querySelector(s);
 const CAMPOS = [
-  ["ANTHROPIC_API_KEY", "Claude (guion y escenas)", "console.anthropic.com", true],
   ["ELEVENLABS_API_KEY", "ElevenLabs (voz)", "elevenlabs.io", true],
   ["FAL_KEY", "fal.ai (imágenes y video)", "fal.ai", true],
   ["ELEVENLABS_VOICE_ID", "ID de voz de ElevenLabs (opcional)", "", false],
 ];
-let estado = null, estiloElegido = null, actual = null;
+const OCUPADO = ["en cola", "storyboard", "render"];
+let estado = null, estiloElegido = null, actual = null, pintado = null, verTablero = null;
 
 async function api(ruta, opciones) {
   const r = await fetch(ruta, opciones);
@@ -141,13 +175,16 @@ async function api(ruta, opciones) {
   if (!r.ok) throw new Error(datos.error || "Error");
   return datos;
 }
+const enviar = (ruta, datos) => api(ruta, {method: "POST", headers: {"content-type": "application/json"},
+                                           body: JSON.stringify(datos || {})});
+const html = t => String(t ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
 
 async function cargarEstado() {
   estado = await api("/api/estado");
-  const m = estado.modo, nombres = {guion: "Guion", voz: "Voz", imagen: "Imágenes"};
+  const m = estado.modo, nombres = {voz: "Voz", imagen: "Imágenes"};
   const activos = Object.keys(m).filter(k => m[k]);
   $("#modo").textContent = activos.length
-    ? "IA activa: " + activos.map(k => nombres[k]).join(", ") + (activos.length < 3 ? " · resto en demo" : "")
+    ? "IA activa: " + activos.map(k => nombres[k]).join(", ") + (activos.length < 2 ? " · resto en demo" : "")
     : "Modo demo (sin claves de IA)";
   $("#clips").disabled = !m.imagen;
   if (!m.imagen) $("#clips").checked = false;
@@ -162,8 +199,7 @@ function pintarEstilos() {
     b.type = "button"; b.className = "estilo"; b.setAttribute("aria-pressed", id === estiloElegido);
     const color = "#" + e.fondo_demo.replace("0x", "");
     b.innerHTML = `<div class="muestra ${e.formato === "9:16" ? "v" : ""}" style="background:${color};color:${e.color_texto}">Aa</div>
-                   <b></b><small>${e.formato === "9:16" ? "Vertical 9:16" : "Horizontal 16:9"}</small>`;
-    b.querySelector("b").textContent = e.nombre;
+                   <b>${html(e.nombre)}</b><small>${e.formato === "9:16" ? "Vertical 9:16" : "Horizontal 16:9"}</small>`;
     b.onclick = () => { estiloElegido = id; pintarEstilos(); };
     cont.appendChild(b);
   }
@@ -172,84 +208,177 @@ function pintarEstilos() {
 $("#guion").addEventListener("input", e => {
   const t = e.target.value.trim(), palabras = t ? t.split(/\s+/).length : 0;
   const escenas = t ? t.split(/\n\s*\n/).filter(p => p.trim()).length : 0;
-  $("#conteo").textContent = `${palabras} palabras · ${escenas} escena${escenas === 1 ? "" : "s"} · ~${Math.round(palabras / 2.5)} s de video`;
+  $("#conteo").textContent = `${palabras} palabras · hasta ${escenas} escena${escenas === 1 ? "" : "s"} · ~${Math.round(palabras / 2.5)} s de video`;
 });
 
-$("#generar").onclick = async () => {
+$("#crear").onclick = async () => {
   $("#errorForm").textContent = "";
   try {
-    const t = await api("/api/videos", {method: "POST", headers: {"content-type": "application/json"},
-      body: JSON.stringify({guion: $("#guion").value, estilo: estiloElegido, clips: $("#clips").checked})});
-    actual = t.id; pintarVista(t); cargarLista();
+    const p = await enviar("/api/proyectos", {guion: $("#guion").value, biblia: $("#biblia").value,
+                                              estilo: estiloElegido, clips: $("#clips").checked});
+    abrir(p.id);
   } catch (e) { $("#errorForm").textContent = e.message; }
 };
 
-function pintarVista(t) {
-  const v = $("#vista");
-  if (t.estado === "listo") {
-    if (v.dataset.id === t.id && v.dataset.estado === "listo") return;
-    v.innerHTML = `<video controls autoplay src="/videos/${t.id}.mp4"></video>
-      <div class="acciones"><a href="/videos/${t.id}.mp4" download="videosyt-${t.id}.mp4">Descargar MP4</a>
-        <button type="button" onclick="fetch('/api/abrir-carpeta', {method: 'POST'})">Abrir carpeta de videos</button></div>`;
-  } else if (t.estado === "error") {
-    v.innerHTML = `<p class="error"></p>`; v.querySelector("p").textContent = "No se pudo crear: " + t.mensaje;
+function abrir(id) { actual = id; pintado = null; verTablero = null; actualizar(); }
+
+// ---------- espacio de trabajo ----------
+
+async function actualizar() {
+  cargarLista();
+  if (!actual) return;
+  let p;
+  try { p = await api(`/api/proyectos/${actual}`); } catch { return; }
+  const tablero = p.fase === "storyboard_listo" || (p.fase === "listo" && verTablero === p.id);
+  const clave = `${p.id}:${tablero ? "tablero" : p.fase}`;
+  if (OCUPADO.includes(p.fase)) {
+    if (pintado !== clave) { $("#espacio").innerHTML = `<h2>${p.fase === "render" ? "Creando el video" : "Creando el storyboard"}</h2>
+      <div class="fila"><b id="msg"></b><span id="pct"></span></div><div class="barra"><div id="barra"></div></div>
+      <div class="ayuda">Puedes dejar la app abierta y volver luego.</div>`; pintado = clave; }
+    $("#msg").textContent = p.mensaje; $("#pct").textContent = p.progreso + "%";
+    $("#barra").style.width = p.progreso + "%";
+  } else if (tablero) {
+    if (pintado !== clave) pintarTablero(p); else refrescarTablero(p);
+    pintado = clave;
+  } else if (p.fase === "listo") {
+    if (pintado !== clave) pintarVideo(p);
+    pintado = clave;
   } else {
-    if (!v.querySelector(".barra")) v.innerHTML = `<div class="fila"><b>Generando…</b><span id="pct"></span></div>
-      <div class="barra"><div></div></div><div class="ayuda" id="msg"></div>`;
-    v.querySelector(".barra div").style.width = t.progreso + "%";
-    $("#pct").textContent = t.progreso + "%"; $("#msg").textContent = t.mensaje;
+    $("#espacio").innerHTML = `<h2>Error</h2><p class="error">${html(p.mensaje)}</p>`;
+    pintado = clave;
   }
-  v.dataset.id = t.id; v.dataset.estado = t.estado;
+}
+
+function avisosHtml(p, extra) {
+  const lineas = [...p.avisos, ...(extra || [])];
+  return lineas.length ? `<div class="avisos">${lineas.map(a => `<p>${html(a)}</p>`).join("")}</div>` : "";
+}
+
+function insignia(e) {
+  if (e.estado === "ia") return `<span class="insignia ia">IA</span>`;
+  if (e.estado === "respaldo") return `<span class="insignia respaldo">${e.respaldo_de ? "Respaldo (de escena " + e.respaldo_de + ")" : "Respaldo"}</span>`;
+  return `<span class="insignia">Demo</span>`;
+}
+
+function pintarTablero(p) {
+  const vertical = estado.estilos[p.estilo]?.formato === "9:16";
+  const respaldos = p.escenas.filter(e => e.estado === "respaldo").length;
+  $("#espacio").innerHTML = `<h2>Storyboard · ${p.escenas.length} escenas</h2>
+    ${avisosHtml(p, respaldos ? [`${respaldos} escena(s) usan una imagen de respaldo. Puedes regenerarlas antes de crear el video.`] : [])}
+    <div class="tablero ${vertical ? "vertical" : ""}">${p.escenas.map((e, i) => `
+      <div class="escena ${e.regenerando ? "ocupada" : ""}" data-i="${i}">
+        <div class="foto"><img src="${e.imagen}" alt="Escena ${i + 1}"><span class="num">${i + 1}</span>${insignia(e)}</div>
+        <div class="cuerpo">
+          <textarea class="narracion" aria-label="Narración de la escena ${i + 1}">${html(e.narracion)}</textarea>
+          <details><summary>Descripción de la imagen</summary>
+            <textarea class="prompt" aria-label="Descripción de la imagen ${i + 1}">${html(e.prompt_visual)}</textarea></details>
+          ${e.aviso ? `<div class="ayuda">${html(e.aviso)}</div>` : ""}
+          <div class="botones"><button class="guardar" disabled>Guardar texto</button><button class="regenerar">Regenerar imagen</button></div>
+        </div>
+      </div>`).join("")}</div>
+    <div class="pie"><span class="ayuda">${p.clips ? "Se generarán voces y clips animados (Kling)." : "Se generarán las voces y se montará el video."}</span>
+      <button class="primario" id="render">Crear video</button></div>
+    <div class="error" id="errorTablero"></div>`;
+  document.querySelectorAll(".escena").forEach(tarjeta => {
+    const i = +tarjeta.dataset.i, guardar = tarjeta.querySelector(".guardar");
+    tarjeta.querySelectorAll("textarea").forEach(t => t.addEventListener("input", () => { guardar.disabled = false; }));
+    guardar.onclick = async () => {
+      await enviar(`/api/proyectos/${p.id}/escenas/${i + 1}`, {
+        narracion: tarjeta.querySelector(".narracion").value, prompt_visual: tarjeta.querySelector(".prompt").value});
+      guardar.disabled = true; guardar.textContent = "Guardado";
+      setTimeout(() => { guardar.textContent = "Guardar texto"; }, 1500);
+    };
+    tarjeta.querySelector(".regenerar").onclick = async () => {
+      if (!guardar.disabled) guardar.click();
+      tarjeta.classList.add("ocupada");
+      await enviar(`/api/proyectos/${p.id}/escenas/${i + 1}/regenerar`);
+    };
+  });
+  $("#render").onclick = async () => {
+    const pendientes = [...document.querySelectorAll(".guardar")].filter(b => !b.disabled);
+    for (const b of pendientes) await b.onclick();
+    try { await enviar(`/api/proyectos/${p.id}/render`); verTablero = null; actualizar(); }
+    catch (e) { $("#errorTablero").textContent = e.message; }
+  };
+}
+
+function refrescarTablero(p) {
+  p.escenas.forEach((e, i) => {
+    const tarjeta = document.querySelector(`.escena[data-i="${i}"]`);
+    if (!tarjeta) return;
+    tarjeta.classList.toggle("ocupada", e.regenerando);
+    const img = tarjeta.querySelector("img");
+    if (!img.src.endsWith(e.imagen)) img.src = e.imagen;
+    tarjeta.querySelector(".insignia").outerHTML = insignia(e);
+  });
+}
+
+function pintarVideo(p) {
+  $("#espacio").innerHTML = `<h2>Tu video</h2>
+    ${avisosHtml(p, p.mensaje && p.mensaje !== "Listo" ? ["Respaldos usados: " + p.mensaje] : [])}
+    <video controls src="/videos/${p.id}.mp4"></video>
+    <div class="acciones"><a href="/videos/${p.id}.mp4" download="videosyt-${p.id}.mp4">Descargar MP4</a>
+      <button type="button" id="carpeta">Abrir carpeta de videos</button>
+      <button type="button" id="volver">Volver al storyboard</button></div>`;
+  $("#carpeta").onclick = () => enviar("/api/abrir-carpeta");
+  $("#volver").onclick = () => { verTablero = p.id; actualizar(); };
 }
 
 async function cargarLista() {
-  const lista = await api("/api/videos"), ul = $("#lista");
+  const lista = await api("/api/proyectos"), ul = $("#lista");
   if (!lista.length) return;
+  const nombres = {"en cola": "en cola", storyboard: "creando", storyboard_listo: "por revisar", render: "renderizando",
+                   listo: "listo", error: "error"};
   ul.innerHTML = "";
   for (const t of lista) {
     const li = document.createElement("li");
+    li.classList.toggle("activo", t.id === actual);
     const nombre = estado.estilos[t.estilo]?.nombre || t.estilo;
-    li.innerHTML = `<div class="titulo"><div></div><small>${nombre} · ${new Date(t.creado * 1000).toLocaleTimeString()}</small></div>
-      <span class="pill ${t.estado}">${t.estado === "generando" ? t.progreso + "%" : t.estado}</span>`;
+    li.innerHTML = `<div class="titulo"><div></div><small>${html(nombre)} · ${new Date(t.creado * 1000).toLocaleString()}</small></div>
+      <span class="pill ${t.fase}">${OCUPADO.includes(t.fase) ? t.progreso + "%" : nombres[t.fase] || t.fase}</span>`;
     li.querySelector(".titulo div").textContent = t.titulo;
-    if (t.estado === "listo") {
-      const b = document.createElement("button"); b.textContent = "Ver";
-      b.onclick = () => { actual = t.id; pintarVista(t); }; li.appendChild(b);
-    }
+    li.onclick = () => abrir(t.id);
     ul.appendChild(li);
-    if (t.id === actual) pintarVista(t);
   }
 }
-setInterval(cargarLista, 1500);
+setInterval(actualizar, 1500);
 
-// Configuración de claves
+// ---------- configuración de claves ----------
 $("#abrirConfig").onclick = () => {
   const c = $("#camposClaves"); c.innerHTML = "";
   for (const [k, nombre, sitio, secreta] of CAMPOS) {
     const on = secreta ? estado.claves[k] : !!estado.claves[k];
     const div = document.createElement("div");
     div.innerHTML = `<div class="fila"><label class="t" for="${k}"></label>
-      <span class="estado-clave ${on ? "on" : "off"}">${on ? "configurada" : "sin configurar"}</span></div>
+      <span class="estado-clave ${on ? "on" : "off"}">${on ? "configurada" : "sin configurar"}
+        ${secreta && on ? '<button type="button" class="quitar">Quitar</button>' : ""}</span></div>
       <input id="${k}" type="${secreta ? "password" : "text"}" autocomplete="off">
       ${sitio ? `<div class="ayuda">Se obtiene en ${sitio}</div>` : ""}`;
     div.querySelector("label").textContent = nombre;
     if (!secreta) div.querySelector("input").value = estado.claves[k] || "";
+    const quitar = div.querySelector(".quitar");
+    if (quitar) quitar.onclick = () => marcarQuitar(div.querySelector("input"), quitar);
     c.appendChild(div);
   }
   $("#config").showModal();
 };
+function marcarQuitar(input, boton) {
+  input.value = ""; input.dataset.quitar = "1";
+  input.placeholder = "Se quitará al guardar";
+  boton.textContent = "Se quitará"; boton.disabled = true;
+}
 $("#cerrarConfig").onclick = () => $("#config").close();
 $("#guardarConfig").onclick = async () => {
   const datos = {};
   for (const [k, , , secreta] of CAMPOS) {
     const v = $("#" + k).value;
-    if (!secreta || v) datos[k] = v;
+    if (!secreta || v || $("#" + k).dataset.quitar) datos[k] = v;
   }
-  await api("/api/config", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(datos)});
+  await enviar("/api/config", datos);
   $("#config").close(); cargarEstado();
 };
 
-cargarEstado().then(cargarLista);
+cargarEstado().then(actualizar);
 </script>
 </body>
 </html>
