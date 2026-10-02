@@ -18,13 +18,18 @@ def narrar(texto, destino):
         )
         with open(destino, "wb") as f:
             f.write(audio)
-    else:
-        segundos = max(3.0, len(texto.split()) / 2.5)  # ~150 palabras por minuto
-        ejecutar.run(
-            ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
-             "-i", "anullsrc=r=44100:cl=stereo", "-t", f"{segundos:.2f}", destino],
-            check=True,
-        )
+        return duracion(destino)
+    return silencio(texto, destino)
+
+
+def silencio(texto, destino):
+    """Audio en silencio con la duración que tendría la narración (~150 palabras por minuto)."""
+    segundos = max(3.0, len(texto.split()) / 2.5)
+    ejecutar.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+         "-i", "anullsrc=r=44100:cl=stereo", "-t", f"{segundos:.2f}", destino],
+        check=True,
+    )
     return duracion(destino)
 
 

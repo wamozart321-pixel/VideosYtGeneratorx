@@ -14,8 +14,15 @@ def ruta_filtro(ruta):
     return ruta.replace(":", "\\:").replace("'", "\\'")
 
 
-def clip(imagen, audio, narracion, duracion, estilo, tamano, destino, video=None):
-    """Si hay `video` (clip animado) se usa en bucle; si no, la imagen con zoom lento."""
+# Imágenes casi fijas: preset rápido y ajuste para imagen estática; calidad visual casi igual.
+CODIFICAR = ["-c:v", "libx264", "-preset", "veryfast", "-tune", "stillimage", "-crf", "23", "-pix_fmt", "yuv420p"]
+
+
+def clip(imagen, audio, narracion, duracion, estilo, tamano, destino, video=None, zoom_inverso=False):
+    """Si hay `video` (clip animado) se usa en bucle; si no, la imagen con zoom lento.
+
+    `zoom_inverso` aleja en vez de acercar: se usa cuando la imagen es de respaldo
+    (reutilizada de otra escena) para que no se vea repetida."""
     ancho, alto = tamano
     sub = destino + ".txt"
     with open(sub, "w") as f:
@@ -26,10 +33,14 @@ def clip(imagen, audio, narracion, duracion, estilo, tamano, destino, video=None
         mover = (f"scale={ancho}:{alto}:force_original_aspect_ratio=increase,"
                  f"crop={ancho}:{alto},fps={FPS},")
     else:
-        entrada = ["-loop", "1", "-i", imagen]
+        # Una sola imagen de entrada: zoompan genera todos los cuadros a partir de ella,
+        # así la imagen se escala una vez y no en cada cuadro.
+        entrada = ["-i", imagen]
+        z = (f"if(eq(on,0),1.3,max(zoom-{estilo['zoom']},1.0))" if zoom_inverso
+             else f"min(zoom+{estilo['zoom']},1.3)")
         mover = (f"scale={ancho * 2}:{alto * 2}:force_original_aspect_ratio=increase,"
                  f"crop={ancho * 2}:{alto * 2},"
-                 f"zoompan=z='min(zoom+{estilo['zoom']},1.3)':d={cuadros}:"
+                 f"zoompan=z='{z}':d={cuadros}:"
                  f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={ancho}x{alto}:fps={FPS},")
     filtro = (
         mover +
@@ -39,7 +50,7 @@ def clip(imagen, audio, narracion, duracion, estilo, tamano, destino, video=None
     )
     ejecutar.run(
         ["ffmpeg", "-y", "-loglevel", "error", *entrada, "-i", audio,
-         "-map", "0:v", "-map", "1:a", "-vf", filtro, "-t", f"{duracion:.2f}", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+         "-map", "0:v", "-map", "1:a", "-vf", filtro, "-t", f"{duracion:.2f}", *CODIFICAR,
          "-c:a", "aac", "-ar", "44100", "-ac", "2", destino],
         check=True,
     )
