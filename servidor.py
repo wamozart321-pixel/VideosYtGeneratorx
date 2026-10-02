@@ -256,13 +256,14 @@ class Manejador(BaseHTTPRequestHandler):
             return self._json({"error": "El guion está vacío"}, 400)
         if datos.get("estilo") not in videosyt.estilos():
             return self._json({"error": "Estilo desconocido"}, 400)
-        formato = datos.get("formato") or "16:9"
-        if formato not in videosyt.FORMATOS:
-            return self._json({"error": "Formato desconocido"}, 400)
+        formato, ritmo, calidad = datos.get("formato") or "16:9", datos.get("ritmo") or "normal", datos.get("calidad") or "buena"
+        if formato not in videosyt.FORMATOS or ritmo not in videosyt.guion.RITMOS or calidad not in videosyt.CALIDADES:
+            return self._json({"error": "Opción desconocida"}, 400)
         id_ = uuid.uuid4().hex[:12]
         try:
             p = videosyt.nuevo_proyecto(texto, datos["estilo"], os.path.join(PROYECTOS, id_),
-                                        datos.get("biblia") or "", datos.get("clips"), formato)
+                                        datos.get("biblia") or "", datos.get("clips"), formato,
+                                        ritmo, calidad, datos.get("subtitulos", True))
         except ValueError as e:
             return self._json({"error": str(e)}, 400)
         primera = next(e["narracion"] for e in p["escenas"])

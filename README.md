@@ -36,7 +36,14 @@ nada se publica en internet. Para cerrar la app, cierra la ventana negra de la t
 4. Revisa las imágenes: puedes corregir el texto de cada escena, cambiar su descripción y **Regenerar imagen**.
 5. Pulsa **Crear video**: recién ahí se generan las voces y se monta el MP4.
 
-### Formato del guion
+#### Ritmo, calidad y subtítulos
+
+- **Escenas por minuto**: los párrafos largos se parten por oraciones. Pocas ≈ 6, Normal ≈ 12 y Muchas ≈ 18 escenas por minuto.
+- **Calidad de imagen**: Rápida (Flux schnell), Buena (Flux dev, por defecto) o Máxima (Flux 1.1 pro).
+- **Subtítulos**: frases cortas de máximo dos líneas que cambian con la voz. Se pueden quitar.
+- Para imágenes más precisas, pide a Scripzy una línea `Imagen:` en inglés por párrafo.
+
+## Formato del guion
 
 ```
 Escena 1

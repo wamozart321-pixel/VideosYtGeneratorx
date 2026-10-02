@@ -116,6 +116,24 @@
       <button type="button" data-f="16:9" aria-pressed="true">Horizontal 16:9</button>
       <button type="button" data-f="9:16" aria-pressed="false">Vertical 9:16</button>
     </div>
+    <label class="t">Escenas por minuto</label>
+    <div class="segmento" id="ritmo">
+      <button type="button" data-v="pocas" aria-pressed="false">Pocas ~6</button>
+      <button type="button" data-v="normal" aria-pressed="true">Normal ~12</button>
+      <button type="button" data-v="muchas" aria-pressed="false">Muchas ~18</button>
+    </div>
+    <div class="ayuda">Los párrafos largos se parten en varias escenas para que la imagen cambie seguido.</div>
+    <label class="t">Calidad de imagen</label>
+    <div class="segmento" id="calidad">
+      <button type="button" data-v="rapida" aria-pressed="false">Rápida</button>
+      <button type="button" data-v="buena" aria-pressed="true">Buena</button>
+      <button type="button" data-v="maxima" aria-pressed="false">Máxima</button>
+    </div>
+    <div class="ayuda" id="ayudaCalidad"></div>
+    <label class="check">
+      <input type="checkbox" id="subtitulos" checked>
+      <span>Subtítulos en el video<br><small class="ayuda">Frases cortas que cambian con la voz.</small></span>
+    </label>
     <label class="check">
       <input type="checkbox" id="clips">
       <span>Animar cada escena con video IA (Kling)<br><small class="ayuda">Más lento y caro. Requiere la clave de fal.ai.</small></span>
@@ -174,7 +192,7 @@
 </dialog>
 
 <script type="module">
-import { ESTILOS, cargarEstilos, vistaPrevia, escenas, crearStoryboard, regenerarEscena, renderizar } from "./motor.js";
+import { ESTILOS, RITMOS, cargarEstilos, vistaPrevia, escenas, crearStoryboard, regenerarEscena, renderizar } from "./motor.js";
 
 const $ = s => document.querySelector(s);
 const CAMPOS = [
@@ -183,7 +201,7 @@ const CAMPOS = [
   ["ELEVENLABS_VOICE_ID", "ID de voz de ElevenLabs (opcional)", "", false],
 ];
 const Plugins = window.Capacitor?.Plugins || {};
-let estilo = "cinematico", formato = "16:9", blob = null, proyecto = null, pendientes = 0, sugerido = "", creandoVistas = false;
+let estilo = "cinematico", formato = "16:9", ritmo = "normal", calidad = "buena", blob = null, proyecto = null, pendientes = 0, sugerido = "", creandoVistas = false;
 
 function claves() {
   try { return JSON.parse(localStorage.getItem("claves") || "{}"); } catch { return {}; }
@@ -269,15 +287,29 @@ function elegirEstilo(id) {
 
 $("#abrirSelector").onclick = () => { pintarSelector(); $("#selector").showModal(); };
 $("#cerrarSelector").onclick = () => $("#selector").close();
+const CALIDADES = {
+  rapida: "Flux schnell: la más barata (~$0.003 por imagen) pero con más errores.",
+  buena: "Flux dev: mucho mejor detalle y menos letras raras (~$0.025 por imagen).",
+  maxima: "Flux 1.1 pro: la mejor calidad (~$0.04 por imagen).",
+};
+function segmento(id, alElegir) {
+  for (const b of document.querySelectorAll(`#${id} button`))
+    b.onclick = () => { alElegir(b.dataset.v);
+      for (const o of document.querySelectorAll(`#${id} button`)) o.setAttribute("aria-pressed", o === b); };
+}
+segmento("ritmo", v => { ritmo = v; contarEscenas(); });
+segmento("calidad", v => { calidad = v; $("#ayudaCalidad").textContent = CALIDADES[v]; });
+$("#ayudaCalidad").textContent = CALIDADES[calidad];
 for (const b of document.querySelectorAll("#formato button"))
   b.onclick = () => { formato = b.dataset.f;
     for (const o of document.querySelectorAll("#formato button")) o.setAttribute("aria-pressed", o === b); };
 
-$("#guion").addEventListener("input", e => {
-  const t = e.target.value.trim(), p = t ? t.split(/\s+/).length : 0;
-  const n = t ? escenas(t).length : 0;
+function contarEscenas() {
+  const t = $("#guion").value.trim(), p = t ? t.split(/\s+/).length : 0;
+  const n = t ? escenas(t, RITMOS[ritmo]).length : 0;
   $("#conteo").textContent = `${p} palabras · ${n} escena${n === 1 ? "" : "s"} · ~${Math.round(p / 2.5)} s de video`;
-});
+}
+$("#guion").addEventListener("input", contarEscenas);
 
 function progreso(titulo, pantalla) {
   $("#tituloProgreso").textContent = titulo;
@@ -353,7 +385,7 @@ $("#generar").onclick = async () => {
   $("#storyboard").classList.add("oculto"); $("#resultado").classList.add("oculto");
   progreso("Creando las imágenes…", false);
   try {
-    proyecto = await crearStoryboard({ guion, estilo, formato, biblia: $("#biblia").value, claves: claves(), avisar });
+    proyecto = await crearStoryboard({ guion, estilo, formato, ritmo, calidad, subtitulos: $("#subtitulos").checked, biblia: $("#biblia").value, claves: claves(), avisar });
     pintarTablero();
     $("#progreso").classList.add("oculto");
     verTablero();

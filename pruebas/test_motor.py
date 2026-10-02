@@ -30,6 +30,25 @@ class Guion(unittest.TestCase):
         self.assertEqual([x["prompt_visual"] for x in e], ["an ancient ocean", "glowing cells", "Hoy seguimos aqui."])
 
 
+    def test_parrafo_largo_se_parte_en_varias_escenas(self):
+        parrafo = " ".join(f"Esta es la oración número {n} del párrafo." for n in range(1, 13))  # 84 palabras
+        normal, muchas = guion.escenas(parrafo), guion.escenas(parrafo, guion.RITMOS["muchas"])
+        self.assertGreaterEqual(len(normal), 5)
+        self.assertGreater(len(muchas), len(normal))
+        self.assertEqual(" ".join(e["narracion"] for e in normal), parrafo)  # no se pierde ni repite texto
+        self.assertTrue(all(len(e["narracion"].split()) <= 20 for e in normal))
+
+    def test_indicacion_visual_solo_en_la_primera_escena_del_parrafo(self):
+        parrafo = "Imagen: a stormy sea\n" + " ".join(f"Oración {n} con varias palabras más." for n in range(8))
+        e = guion.escenas(parrafo)
+        self.assertEqual(e[0]["prompt_visual"], "a stormy sea")
+        self.assertEqual(e[1]["prompt_visual"], e[1]["narracion"])
+
+    def test_subtitulos_cortos(self):
+        trozos = guion.subtitulos("uno dos tres cuatro cinco seis siete ocho nueve diez once doce trece", 7)
+        self.assertEqual([len(t.split()) for t in trozos], [7, 6])
+
+
 class Reintentos(unittest.TestCase):
     def test_reintenta_errores_temporales(self):
         f = mock.Mock(side_effect=[error_http(503), error_http(429), "ok"])
@@ -77,11 +96,12 @@ class Motor(unittest.TestCase):
             videosyt.storyboard(p)
         self.assertEqual(len({c["seed"] for c in cuerpos}), 1)
         self.assertTrue(all(c["prompt"].startswith("a red robot") for c in cuerpos))
+        self.assertTrue(all(c["prompt"].endswith(imagen.SIN_TEXTO) for c in cuerpos))
         self.assertEqual({e["estado_imagen"] for e in p["escenas"]}, {"ia"})
 
     def test_escena_que_falla_usa_imagen_de_respaldo(self):
         def post(url, cabeceras, cuerpo):
-            if cuerpo["prompt"].startswith("Tres"):
+            if "Scene illustrating: Tres" in cuerpo["prompt"]:
                 raise error_http(500)
             return {"images": [{"url": "file://" + self.png}]}
 
