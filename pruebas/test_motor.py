@@ -172,3 +172,29 @@ class Estilos(unittest.TestCase):
                 mock.patch.object(imagen, "descargar", lambda *a: None):
             videosyt.vista_previa("anime", "/tmp/no-importa.png")
         self.assertTrue(enviado["prompt"].startswith(videosyt.estilos()["anime"]["personaje"]))
+
+
+class Actualizacion(unittest.TestCase):
+    def respuesta(self, datos):
+        r = mock.MagicMock()
+        r.__enter__.return_value = io.BytesIO(json.dumps(datos).encode())
+        return r
+
+    def test_lee_la_version_publicada(self):
+        import actualizar
+        datos = {"name": "Videosyt para Windows · versión 42",
+                 "assets": [{"name": "Videosyt.exe", "browser_download_url": "https://x/Videosyt.exe"}]}
+        with mock.patch.object(actualizar, "_pedir", return_value=self.respuesta(datos)):
+            self.assertEqual(actualizar.ultima_publicada(), (42, "https://x/Videosyt.exe"))
+
+    def test_ofrece_actualizar_solo_si_hay_una_version_mayor(self):
+        import actualizar
+        datos = {"name": "Videosyt para Windows · versión 42",
+                 "assets": [{"name": "Videosyt.exe", "browser_download_url": "https://x/Videosyt.exe"}]}
+        for actual, esperado in [(41, 42), (42, 0)]:
+            actualizar.estado["disponible"] = 0
+            with mock.patch.object(actualizar, "_pedir", return_value=self.respuesta(datos)), \
+                    mock.patch.object(actualizar, "version_actual", return_value=actual), \
+                    mock.patch.object(actualizar.sys, "frozen", True, create=True):
+                actualizar.comprobar()
+            self.assertEqual(actualizar.estado["disponible"], esperado)

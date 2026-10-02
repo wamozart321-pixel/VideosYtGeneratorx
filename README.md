@@ -96,6 +96,17 @@ guion + estilo + personajes fijos
 5. Unir      (FFmpeg)           concatena los clips → MP4
 ```
 
+## Actualizaciones
+
+- **Windows**: al abrir, la app revisa si hay una versión nueva publicada. Si la hay, muestra **Actualizar ahora**:
+  descarga el .exe nuevo, se cierra, lo reemplaza y se vuelve a abrir. Las claves y proyectos están en
+  la carpeta `Videosyt` de tu usuario, así que se conservan.
+- **Android**: cada APK tiene un número de versión mayor y la misma firma, así que se instala **encima** del anterior
+  sin desinstalar y las claves se conservan. La app avisa cuando hay una versión nueva con un botón **Descargar**.
+  La firma está cifrada en `android/firma.jks.enc`; GitHub la descifra con el secreto `ANDROID_FIRMA`
+  (Settings → Secrets and variables → Actions). Sin ese secreto el APK se firma con una clave temporal.
+- En **Configurar IAs → Respaldo de claves** (Android) puedes copiar tus claves como un código y pegarlo en otro teléfono.
+
 ## Estilos
 
 Hay 20 estilos visuales en `estilos/estilos.json`, compartidos por la app de Windows y la de Android.

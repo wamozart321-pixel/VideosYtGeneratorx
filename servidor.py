@@ -18,6 +18,7 @@ import webbrowser
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import actualizar
 import videosyt
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
@@ -188,7 +189,8 @@ class Manejador(BaseHTTPRequestHandler):
             claves = {k: bool(os.environ.get(k)) for k in videosyt.CLAVES.values()}
             claves.update({k: os.environ.get(k, "") for k in OPCIONALES})
             return self._json({"estilos": videosyt.estilos(), "modo": videosyt.modo(), "claves": claves,
-                               "vistas": vistas_listas(), "vistas_estado": vistas})
+                               "vistas": vistas_listas(), "vistas_estado": vistas,
+                               "actualizacion": actualizar.estado})
         if ruta == "/api/proyectos":
             lista = sorted(proyectos.values(), key=lambda p: p["creado"], reverse=True)
             return self._json([resumen(p) for p in lista])
@@ -234,6 +236,9 @@ class Manejador(BaseHTTPRequestHandler):
                 datos = self._leer()
                 videosyt.editar_escena(p, i, datos.get("narracion"), datos.get("prompt_visual"))
             return self._json(detalle(p))
+        if ruta == "/api/actualizar":
+            actualizar.instalar_en_segundo_plano()
+            return self._json(actualizar.estado)
         if ruta == "/api/vistas":
             if not os.environ.get("FAL_KEY"):
                 return self._json({"error": "Configura la clave de fal.ai para crear las vistas previas"}, 400)
@@ -311,6 +316,7 @@ def iniciar(puerto=PUERTO):
     os.makedirs(VISTAS, exist_ok=True)
     cargar_config()
     cargar_proyectos()
+    actualizar.comprobar_en_segundo_plano()
     threading.Thread(target=trabajador, daemon=True).start()
     servidor = ThreadingHTTPServer(("127.0.0.1", puerto), Manejador)
     threading.Thread(target=servidor.serve_forever, daemon=True).start()

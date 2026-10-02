@@ -3,6 +3,7 @@ name: Compilar Videosyt.apk
 on:
   push:
     branches: [main, app-web]
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -29,12 +30,42 @@ jobs:
       - name: Preparar el proyecto Android
         run: |
           cp ../estilos/estilos.json www/estilos.json
+          echo '{"version": ${{ github.run_number }}}' > www/version.json
           npm install
           npx cap add android
           npx cap sync android
 
+      # Cada compilación tiene un número mayor y la misma firma: así el APK nuevo se instala
+      # encima del anterior (sin desinstalar) y se conservan las claves guardadas.
+      - name: Versión y firma fija
+        env:
+          FIRMA: ${{ secrets.ANDROID_FIRMA }}
+        run: |
+          sed -i -E 's/versionCode [0-9]+/versionCode ${{ github.run_number }}/; s/versionName "[^"]*"/versionName "1.${{ github.run_number }}"/' android/app/build.gradle
+          if [ -n "$FIRMA" ]; then
+            openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in firma.jks.enc -out android/app/videosyt.jks -pass env:FIRMA
+            cat >> android/app/build.gradle <<'GRADLE'
+
+          android {
+              signingConfigs {
+                  debug {
+                      storeFile file('videosyt.jks')
+                      storePassword System.getenv('FIRMA')
+                      keyAlias 'videosyt'
+                      keyPassword System.getenv('FIRMA')
+                  }
+              }
+          }
+          GRADLE
+          else
+            echo "::warning::Falta el secreto ANDROID_FIRMA: el APK se firma con una clave temporal y no se podrá instalar encima del anterior."
+          fi
+          grep -E "versionCode|versionName" android/app/build.gradle
+
       - name: Compilar el APK
         working-directory: android/android
+        env:
+          FIRMA: ${{ secrets.ANDROID_FIRMA }}
         run: ./gradlew assembleDebug --no-daemon
 
       - name: Renombrar
@@ -51,4 +82,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete android-ultima --yes --cleanup-tag || true
-          gh release create android-ultima Videosyt.apk --title "Videosyt para Android" --notes "Descarga Videosyt.apk en el teléfono e instálalo (permite instalar apps de fuentes desconocidas)."
+          gh release create android-ultima Videosyt.apk --title "Videosyt para Android · versión ${{ github.run_number }}" --notes "Descarga Videosyt.apk en el teléfono e instálalo (permite instalar apps de fuentes desconocidas)."
