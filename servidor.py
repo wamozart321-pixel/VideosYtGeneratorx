@@ -1,14 +1,15 @@
 """Interfaz de Videosyt. Corre solo en tu computadora; no necesita hosting.
 
 Uso:  python3 servidor.py   (abre el navegador solo en http://localhost:8000)
-Los videos se guardan en la carpeta salida/ y las claves de API en config.json.
+Los proyectos se guardan en proyectos/, los videos terminados en salida/ y las
+claves de API en config.json.
 """
 import json
 import os
 import queue
+import re
 import subprocess
 import sys
-import re
 import threading
 import time
 import traceback
@@ -19,13 +20,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import videosyt
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
-DATOS = os.environ.get("VIDEOSYT_DATOS") or AQUI  # donde se guardan videos y claves
+DATOS = os.environ.get("VIDEOSYT_DATOS") or AQUI  # donde se guardan proyectos, videos y claves
 SALIDA = os.path.join(DATOS, "salida")
+PROYECTOS = os.path.join(DATOS, "proyectos")
 CONFIG = os.path.join(DATOS, "config.json")
 PUERTO = int(os.environ.get("PORT", "8000"))
-OPCIONALES = ["ELEVENLABS_VOICE_ID", "CLAUDE_MODEL"]
+OPCIONALES = ["ELEVENLABS_VOICE_ID"]
+OCUPADO = {"en cola", "storyboard", "render"}
 
-trabajos = {}
+proyectos = {}
 cola = queue.Queue()
 
 
@@ -56,28 +59,70 @@ def guardar_config(nuevas):
         json.dump(actual, f, indent=2)
 
 
-# ---------- trabajos en segundo plano ----------
+# ---------- proyectos y trabajos en segundo plano ----------
+
+def cargar_proyectos():
+    if not os.path.isdir(PROYECTOS):
+        return
+    for id_ in os.listdir(PROYECTOS):
+        try:
+            p = videosyt.cargar(os.path.join(PROYECTOS, id_))
+        except (OSError, ValueError):
+            continue
+        if p.get("fase") in OCUPADO:  # la app se cerró a mitad de un trabajo
+            p.update(fase="error" if not p.get("escenas_listas") else "storyboard_listo",
+                     mensaje="Se interrumpió al cerrar la app. Puedes volver a intentarlo.")
+        proyectos[id_] = p
+
 
 def trabajador():
     while True:
-        id_ = cola.get()
-        t = trabajos[id_]
-        t["estado"] = "generando"
+        id_, tarea = cola.get()
+        p = proyectos[id_]
 
         def avisar(pct, msg):
-            t["progreso"], t["mensaje"] = pct, msg
+            p["progreso"], p["mensaje"] = pct, msg
 
         try:
-            t["escenas"] = videosyt.crear_video(
-                t["guion"], t["estilo"], os.path.join(SALIDA, f"{id_}.mp4"), avisar, t["clips"])
-            t["estado"] = "listo"
+            if tarea == "storyboard":
+                p["fase"] = "storyboard"
+                videosyt.storyboard(p, avisar)
+                p.update(fase="storyboard_listo", escenas_listas=True, mensaje="Revisa las escenas")
+            elif tarea == "render":
+                p["fase"] = "render"
+                destino = os.path.join(SALIDA, f"videosyt-{id_}.mp4")
+                videosyt.renderizar(p, destino, avisar)
+                p.update(fase="listo", video=destino, mensaje=videosyt.resumen_respaldos(p) or "Listo")
         except Exception as e:  # se muestra en la interfaz
             traceback.print_exc()
-            t["estado"], t["mensaje"] = "error", f"{type(e).__name__}: {e}"
+            p.update(fase="error" if not p.get("escenas_listas") else "storyboard_listo",
+                     mensaje=f"No se pudo terminar: {type(e).__name__}: {e}")
+        videosyt.guardar(p)
 
 
-def resumen(t):
-    return {k: t[k] for k in ("id", "titulo", "estilo", "estado", "progreso", "mensaje", "creado", "clips")}
+def regenerar(p, i):
+    try:
+        videosyt.regenerar_escena(p, i)
+    except Exception:  # noqa: BLE001  (el estado de la escena ya refleja el fallo)
+        traceback.print_exc()
+    finally:
+        p["escenas"][i]["regenerando"] = False
+
+
+def resumen(p):
+    return {"id": p["id"], "titulo": p["titulo"], "estilo": p["estilo"], "fase": p.get("fase"),
+            "progreso": p.get("progreso", 0), "mensaje": p.get("mensaje", ""), "creado": p["creado"]}
+
+
+def detalle(p):
+    datos = resumen(p)
+    datos.update(biblia=p["biblia"], clips=p["clips"], avisos=p["avisos"], tiene_video=bool(p.get("video")),
+                 escenas=[{"narracion": e["narracion"], "prompt_visual": e["prompt_visual"],
+                           "estado": e["estado_imagen"], "respaldo_de": e.get("respaldo_de"),
+                           "aviso": e.get("aviso"), "regenerando": e.get("regenerando", False),
+                           "imagen": f"/archivos/{p['id']}/{e['imagen']}?v={e['version']}"}
+                          for e in p["escenas"]])
+    return datos
 
 
 def abrir_carpeta(ruta):
@@ -105,6 +150,12 @@ class Manejador(BaseHTTPRequestHandler):
         largo = int(self.headers.get("content-length", 0))
         return json.loads(self.rfile.read(largo) or b"{}")
 
+    def _proyecto(self, id_):
+        p = proyectos.get(id_)
+        if not p:
+            self._json({"error": "Proyecto no encontrado"}, 404)
+        return p
+
     def do_GET(self):
         ruta = self.path.split("?")[0]
         if ruta == "/":
@@ -113,41 +164,76 @@ class Manejador(BaseHTTPRequestHandler):
             claves = {k: bool(os.environ.get(k)) for k in videosyt.CLAVES.values()}
             claves.update({k: os.environ.get(k, "") for k in OPCIONALES})
             return self._json({"estilos": videosyt.estilos(), "modo": videosyt.modo(), "claves": claves})
-        if ruta == "/api/videos":
-            lista = sorted(trabajos.values(), key=lambda t: t["creado"], reverse=True)
-            return self._json([resumen(t) for t in lista])
-        m = re.fullmatch(r"/api/videos/([a-f0-9]+)", ruta)
-        if m and m.group(1) in trabajos:
-            return self._json(resumen(trabajos[m.group(1)]))
+        if ruta == "/api/proyectos":
+            lista = sorted(proyectos.values(), key=lambda p: p["creado"], reverse=True)
+            return self._json([resumen(p) for p in lista])
+        m = re.fullmatch(r"/api/proyectos/([a-f0-9]+)", ruta)
+        if m:
+            p = self._proyecto(m.group(1))
+            return p and self._json(detalle(p))
+        m = re.fullmatch(r"/archivos/([a-f0-9]+)/(escena\d+\.png)", ruta)
+        if m and m.group(1) in proyectos:
+            archivo = os.path.join(proyectos[m.group(1)]["carpeta"], m.group(2))
+            if os.path.exists(archivo):
+                return self._archivo(archivo, "image/png")
         m = re.fullmatch(r"/videos/([a-f0-9]+)\.mp4", ruta)
-        if m and os.path.exists(os.path.join(SALIDA, f"{m.group(1)}.mp4")):
-            return self._archivo(os.path.join(SALIDA, f"{m.group(1)}.mp4"), "video/mp4")
+        if m and proyectos.get(m.group(1), {}).get("video") and os.path.exists(proyectos[m.group(1)]["video"]):
+            return self._archivo(proyectos[m.group(1)]["video"], "video/mp4")
         self._json({"error": "no encontrado"}, 404)
 
     def do_POST(self):
-        if self.path == "/api/videos":
-            datos = self._leer()
-            texto = (datos.get("guion") or "").strip()
-            if not texto:
-                return self._json({"error": "El guion está vacío"}, 400)
-            if datos.get("estilo") not in videosyt.estilos():
-                return self._json({"error": "Estilo desconocido"}, 400)
-            id_ = uuid.uuid4().hex[:12]
-            primera = texto.splitlines()[0]
-            trabajos[id_] = {
-                "id": id_, "guion": texto, "estilo": datos["estilo"], "clips": bool(datos.get("clips")),
-                "titulo": primera[:60] + ("…" if len(primera) > 60 else ""),
-                "estado": "en cola", "progreso": 0, "mensaje": "Esperando turno", "creado": time.time(),
-            }
-            cola.put(id_)
-            return self._json(resumen(trabajos[id_]), 201)
-        if self.path == "/api/abrir-carpeta":
+        ruta = self.path.split("?")[0]
+        if ruta == "/api/proyectos":
+            return self._crear(self._leer())
+        m = re.fullmatch(r"/api/proyectos/([a-f0-9]+)/(render|escenas/(\d+)(/regenerar)?)", ruta)
+        if m:
+            p = self._proyecto(m.group(1))
+            if not p:
+                return
+            if p.get("fase") in OCUPADO:
+                return self._json({"error": "Espera a que termine el trabajo en curso"}, 409)
+            if m.group(2) == "render":
+                p.update(fase="en cola", progreso=0, mensaje="Esperando turno")
+                cola.put((p["id"], "render"))
+                return self._json(resumen(p))
+            i = int(m.group(3)) - 1
+            if not 0 <= i < len(p["escenas"]):
+                return self._json({"error": "Escena inexistente"}, 404)
+            if m.group(4):
+                p["escenas"][i]["regenerando"] = True
+                threading.Thread(target=regenerar, args=(p, i), daemon=True).start()
+            else:
+                datos = self._leer()
+                videosyt.editar_escena(p, i, datos.get("narracion"), datos.get("prompt_visual"))
+            return self._json(detalle(p))
+        if ruta == "/api/abrir-carpeta":
+            os.makedirs(SALIDA, exist_ok=True)
             abrir_carpeta(SALIDA)
             return self._json({"ok": True})
-        if self.path == "/api/config":
+        if ruta == "/api/config":
             guardar_config(self._leer())
             return self._json({"ok": True})
         self._json({"error": "no encontrado"}, 404)
+
+    def _crear(self, datos):
+        texto = (datos.get("guion") or "").strip()
+        if not texto:
+            return self._json({"error": "El guion está vacío"}, 400)
+        if datos.get("estilo") not in videosyt.estilos():
+            return self._json({"error": "Estilo desconocido"}, 400)
+        id_ = uuid.uuid4().hex[:12]
+        try:
+            p = videosyt.nuevo_proyecto(texto, datos["estilo"], os.path.join(PROYECTOS, id_),
+                                        datos.get("biblia") or "", datos.get("clips"))
+        except ValueError as e:
+            return self._json({"error": str(e)}, 400)
+        primera = next(e["narracion"] for e in p["escenas"])
+        p.update(id=id_, titulo=primera[:60] + ("…" if len(primera) > 60 else ""), creado=time.time(),
+                 fase="en cola", progreso=0, mensaje="Esperando turno")
+        proyectos[id_] = p
+        videosyt.guardar(p)
+        cola.put((id_, "storyboard"))
+        return self._json(resumen(p), 201)
 
     def _archivo(self, ruta, tipo):
         tamano = os.path.getsize(ruta)
@@ -182,7 +268,9 @@ class Manejador(BaseHTTPRequestHandler):
 def iniciar(puerto=PUERTO):
     """Arranca el servidor en segundo plano y devuelve su dirección."""
     os.makedirs(SALIDA, exist_ok=True)
+    os.makedirs(PROYECTOS, exist_ok=True)
     cargar_config()
+    cargar_proyectos()
     threading.Thread(target=trabajador, daemon=True).start()
     servidor = ThreadingHTTPServer(("127.0.0.1", puerto), Manejador)
     threading.Thread(target=servidor.serve_forever, daemon=True).start()

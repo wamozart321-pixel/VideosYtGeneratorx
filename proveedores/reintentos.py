@@ -48,9 +48,11 @@ def con_reintentos(funcion, *args, intentos=4, espera_base=1.0, **kwargs):
                 raise ErrorDeCuenta(f"{e.code}: {_detalle(e)}") from e
             if e.code != 429 and e.code < 500:
                 raise
+            if n == intentos - 1:
+                raise
             espera = float(e.headers.get("retry-after") or espera_base * 2 ** n)
         except (urllib.error.URLError, TimeoutError, ConnectionError):
+            if n == intentos - 1:
+                raise
             espera = espera_base * 2 ** n
-        if n == intentos - 1:
-            raise
         time.sleep(min(espera, 30) + random.uniform(0, espera_base / 2))

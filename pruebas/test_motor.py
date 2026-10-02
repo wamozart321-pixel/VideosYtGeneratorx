@@ -36,6 +36,12 @@ class Reintentos(unittest.TestCase):
         self.assertEqual(reintentos.con_reintentos(f), "ok")
         self.assertEqual(f.call_count, 3)
 
+    def test_se_rinde_con_el_error_original(self):
+        f = mock.Mock(side_effect=error_http(500))
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            reintentos.con_reintentos(f, intentos=3)
+        self.assertEqual((ctx.exception.code, f.call_count), (500, 3))
+
     def test_no_reintenta_cuenta_sin_saldo(self):
         f = mock.Mock(side_effect=error_http(403, b'{"detail":"User is locked. Reason: TOP_UP."}'))
         with self.assertRaises(reintentos.ErrorDeCuenta):
