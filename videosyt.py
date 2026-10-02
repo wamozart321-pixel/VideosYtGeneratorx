@@ -21,7 +21,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from proveedores import clip_video, guion, imagen, montaje, voz
+from proveedores import clip_video, director, guion, imagen, montaje, voz
 from proveedores.reintentos import ErrorDeCuenta, Proveedores, con_reintentos
 
 TAMANOS = {"16:9": (1280, 720), "9:16": (720, 1280)}
@@ -78,12 +78,14 @@ def nuevo_proyecto(texto, nombre_estilo, carpeta, biblia="", clips=False, format
     escenas = guion.escenas(texto, guion.RITMOS[ritmo])
     if not escenas:
         raise ValueError("El guion no tiene texto para narrar")
+    semilla = random.randint(0, 2**31 - 1)
     proyecto = {
         "carpeta": carpeta, "estilo": nombre_estilo, "formato": formato, "biblia": biblia.strip(), "clips": bool(clips),
         "ritmo": ritmo, "calidad": calidad, "subtitulos": bool(subtitulos),
-        "semilla": random.randint(0, 2**31 - 1), "guion": texto, "avisos": [],
+        "semilla": semilla, "guion": texto, "avisos": [],
         "escenas": [{**e, "imagen": f"escena{i:02d}.png", "url": None, "estado_imagen": "pendiente",
-                     "version": 0} for i, e in enumerate(escenas, 1)],
+                     "semilla": (semilla + i) % 2**31, "personaje": True, "version": 0}
+                    for i, e in enumerate(escenas, 1)],
     }
     os.makedirs(carpeta, exist_ok=True)
     guardar(proyecto)
@@ -153,8 +155,11 @@ def _imagen_escena(proyecto, i, estilo, proveedores, semaforos, semilla=None):
     e["aviso"] = None
     if os.environ.get("FAL_KEY"):
         try:
+            if semilla is None:  # proyectos anteriores no guardaban una semilla por escena
+                semilla = e.get("semilla", (proyecto["semilla"] + i + 1) % 2**31)
+            biblia = proyecto["biblia"] if e.get("personaje", True) else ""
             e["url"] = _llamar("imagen", proveedores, semaforos, imagen.generar, e["prompt_visual"], estilo,
-                               destino, proyecto["biblia"], semilla if semilla is not None else proyecto["semilla"])
+                               destino, biblia, semilla)
             e["estado_imagen"] = "ia"
         except Exception as error:  # noqa: BLE001  (cualquier fallo de la API → respaldo)
             e.update(url=None, estado_imagen="fallida", aviso=f"No se pudo crear la imagen: {error}")
@@ -182,9 +187,31 @@ def _resolver_respaldos(proyecto, estilo):
         e["version"] += 1
 
 
+def dirigir(proyecto, avisar=lambda *_: None):
+    """Cambia el texto narrado de cada escena por una descripción visual propia (una vez por proyecto).
+
+    Las escenas con indicación visual escrita en el guion (Imagen: ...) se respetan."""
+    if proyecto.get("dirigido") or not os.environ.get("FAL_KEY"):
+        return
+    avisar(1, "Pensando qué mostrar en cada escena")
+    escenas = proyecto["escenas"]
+    try:
+        descripciones = director.describir(proyecto["guion"], [e["narracion"] for e in escenas], proyecto["biblia"])
+    except Exception as error:  # noqa: BLE001  (sin director, las imágenes usan el texto del guion)
+        proyecto["avisos"].append(f"No se pudo describir cada escena con IA ({error}); "
+                                  "las imágenes se basan en el texto del guion.")
+        return
+    for n, e in enumerate(escenas, 1):
+        if n in descripciones and not e.get("visual_propio"):
+            e["prompt_visual"], e["personaje"] = descripciones[n]
+    proyecto["dirigido"] = True
+    guardar(proyecto)
+
+
 def storyboard(proyecto, avisar=lambda *_: None):
     """Genera en paralelo las imágenes de todas las escenas."""
     estilo = estilo_de(proyecto)
+    dirigir(proyecto, avisar)
     proveedores, semaforos = Proveedores(), _semaforos()
     escenas = proyecto["escenas"]
     progreso = _Progreso(avisar, 2, 98, len(escenas), "Creando imágenes")
@@ -205,8 +232,9 @@ def editar_escena(proyecto, i, narracion=None, prompt_visual=None):
     e = proyecto["escenas"][i]
     if narracion is not None and narracion.strip():
         e["narracion"] = narracion.strip()
-    if prompt_visual is not None and prompt_visual.strip():
+    if prompt_visual is not None and prompt_visual.strip() and prompt_visual.strip() != e["prompt_visual"]:
         e["prompt_visual"] = prompt_visual.strip()
+        e["visual_propio"] = True
     guardar(proyecto)
 
 

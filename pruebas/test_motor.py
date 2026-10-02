@@ -12,7 +12,7 @@ import urllib.error
 from unittest import mock
 
 import videosyt
-from proveedores import guion, imagen, reintentos, voz
+from proveedores import director, guion, imagen, reintentos, voz
 
 reintentos.time.sleep = lambda s: None  # sin esperas reales entre reintentos
 
@@ -76,15 +76,18 @@ class Motor(unittest.TestCase):
                         "-frames:v", "1", self.png], check=True)
         self.entorno = mock.patch.dict(os.environ, {"FAL_KEY": "x"})
         self.entorno.start()
+        self.sin_director = mock.patch.object(director, "post", side_effect=error_http(404))  # nunca a la red
+        self.sin_director.start()
         self.texto = "Uno.\n\nDos.\n\nTres.\n\nCuatro."
 
     def tearDown(self):
         self.entorno.stop()
+        self.sin_director.stop()
 
     def proyecto(self, **kw):
         return videosyt.nuevo_proyecto(self.texto, "cinematico", os.path.join(self.dir, "p"), **kw)
 
-    def test_misma_semilla_y_biblia_en_todas_las_escenas(self):
+    def test_semilla_distinta_por_escena_y_biblia_al_final(self):
         cuerpos = []
 
         def post(url, cabeceras, cuerpo):
@@ -94,10 +97,55 @@ class Motor(unittest.TestCase):
         p = self.proyecto(biblia="a red robot")
         with mock.patch.object(imagen, "post", post):
             videosyt.storyboard(p)
-        self.assertEqual(len({c["seed"] for c in cuerpos}), 1)
-        self.assertTrue(all(c["prompt"].startswith("a red robot") for c in cuerpos))
+        self.assertEqual(len({c["seed"] for c in cuerpos}), 4)
+        self.assertTrue(all(c["prompt"].startswith("Scene illustrating:") for c in cuerpos))
+        self.assertTrue(all("Recurring character: a red robot" in c["prompt"] for c in cuerpos))
+        self.assertTrue(any("texto del guion" in a for a in p["avisos"]))  # el director falló: se avisa
         self.assertTrue(all(c["prompt"].endswith(imagen.SIN_TEXTO) for c in cuerpos))
         self.assertEqual({e["estado_imagen"] for e in p["escenas"]}, {"ia"})
+
+    def test_director_describe_cada_escena_y_decide_el_personaje(self):
+        self.texto = "Uno.\n\nImagen: un vinilo negro\nDos.\n\nTres.\n\nCuatro."
+        pedidos, cuerpos = [], []
+
+        def post_director(url, cabeceras, cuerpo, timeout=None):
+            pedidos.append(cuerpo)
+            return {"output": "```json\n" + json.dumps([
+                {"n": 1, "imagen": "a smoky 1930s jazz club, wide shot", "personaje": False},
+                {"n": 2, "imagen": "ignored because the script has its own visual", "personaje": False},
+                {"n": 3, "imagen": "close-up of a pirate radio microphone", "personaje": True},
+            ]) + "\n```"}
+
+        def post(url, cabeceras, cuerpo):
+            cuerpos.append(cuerpo["prompt"])
+            return {"images": [{"url": "file://" + self.png}]}
+
+        p = self.proyecto(biblia="a red robot")
+        with mock.patch.object(director, "post", post_director), mock.patch.object(imagen, "post", post):
+            videosyt.storyboard(p)
+        self.assertEqual(len(pedidos), 1)
+        self.assertIn("Full script", pedidos[0]["prompt"])
+        visuales = [e["prompt_visual"] for e in p["escenas"]]
+        self.assertEqual(visuales, ["a smoky 1930s jazz club, wide shot", "un vinilo negro",
+                                    "close-up of a pirate radio microphone", "Cuatro."])  # la 4 no vino: queda el texto
+        jazz = next(c for c in cuerpos if "jazz club" in c)
+        radio = next(c for c in cuerpos if "pirate radio" in c)
+        self.assertNotIn("red robot", jazz)
+        self.assertIn("red robot", radio)
+        self.assertTrue(p["dirigido"])
+        videosyt.storyboard(p)  # no se vuelve a dirigir (ni a gastar) en el mismo proyecto
+        self.assertEqual(len(pedidos), 1)
+
+    def test_editar_la_descripcion_la_vuelve_propia(self):
+        p = self.proyecto()
+        videosyt.editar_escena(p, 0, prompt_visual="a burning vinyl record")
+        self.assertTrue(p["escenas"][0]["visual_propio"])
+
+    def test_leer_respuesta_del_director(self):
+        self.assertEqual(director.leer_respuesta('Sure: [{"n": 2, "imagen": "x", "personaje": true}]', {1, 2}),
+                         {2: ("x", True)})
+        with self.assertRaises(ValueError):
+            director.leer_respuesta("no puedo", {1})
 
     def test_escena_que_falla_usa_imagen_de_respaldo(self):
         def post(url, cabeceras, cuerpo):
@@ -171,7 +219,7 @@ class Estilos(unittest.TestCase):
         with mock.patch.dict(os.environ, {"FAL_KEY": "x"}), mock.patch.object(imagen, "post", post), \
                 mock.patch.object(imagen, "descargar", lambda *a: None):
             videosyt.vista_previa("anime", "/tmp/no-importa.png")
-        self.assertTrue(enviado["prompt"].startswith(videosyt.estilos()["anime"]["personaje"]))
+        self.assertIn(videosyt.estilos()["anime"]["personaje"], enviado["prompt"])
 
 
 class Actualizacion(unittest.TestCase):
