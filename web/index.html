@@ -116,6 +116,11 @@
   .pie { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-top: 16px; flex-wrap: wrap; }
   .pie button.primario { width: auto; margin: 0; }
   .pill.storyboard_listo { color: var(--warn); }
+  .aviso-actualizacion { display: flex; gap: 12px; align-items: center; justify-content: center; flex-wrap: wrap;
+                         padding: 10px 16px; background: color-mix(in srgb, var(--ok) 15%, var(--panel));
+                         border-bottom: 1px solid var(--line); font-size: 14px; }
+  .aviso-actualizacion button { padding: 6px 14px; }
+  .oculto { display: none !important; }
 </style>
 </head>
 <body>
@@ -124,6 +129,7 @@
   <div class="modo" id="modo"></div>
   <button id="abrirConfig">Configurar IAs</button>
 </header>
+<div class="aviso-actualizacion oculto" id="actualizacion"></div>
 
 <main>
   <div class="izquierda">
@@ -242,6 +248,17 @@ async function cargarEstado() {
   $("#clips").disabled = !m.imagen;
   if (!m.imagen) $("#clips").checked = false;
   pintarEstilos();
+  pintarActualizacion();
+}
+
+function pintarActualizacion() {
+  const a = estado.actualizacion, caja = $("#actualizacion");
+  caja.classList.toggle("oculto", !a.disponible);
+  if (!a.disponible) return;
+  if (a.descargando) { caja.innerHTML = `Descargando la versión ${a.disponible}… ${a.progreso}%. La app se cerrará y se abrirá sola.`; return; }
+  caja.innerHTML = `<span>Hay una versión nueva de Videosyt (${a.disponible}). Tus claves y proyectos se conservan.</span>
+    <button id="actualizarYa">Actualizar ahora</button>${a.error ? `<span class="error">${html(a.error)}</span>` : ""}`;
+  $("#actualizarYa").onclick = async () => { await enviar("/api/actualizar"); cargarEstado(); };
 }
 
 // ---------- estilos ----------
@@ -466,7 +483,7 @@ async function cargarLista() {
   }
 }
 setInterval(actualizar, 1500);
-setInterval(() => { if (estado?.vistas_estado?.generando) cargarEstado(); }, 2000);
+setInterval(() => { if (estado?.vistas_estado?.generando || estado?.actualizacion?.descargando) cargarEstado(); }, 2000);
 
 // ---------- configuración de claves ----------
 $("#abrirConfig").onclick = () => {
@@ -504,6 +521,7 @@ $("#guardarConfig").onclick = async () => {
 };
 
 cargarEstado().then(actualizar);
+setTimeout(cargarEstado, 8000);  // la búsqueda de actualizaciones termina después de abrir
 </script>
 </body>
 </html>

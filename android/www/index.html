@@ -90,6 +90,11 @@
   .escena details textarea { margin-top: 6px; color: var(--text); }
   .escena .aviso { font-size: 13px; color: var(--muted); margin-top: 6px; }
   .escena .acciones { margin-top: 8px; } .escena .acciones button { font-size: 14px; padding: 8px; }
+  .aviso-actualizacion { padding: 12px 16px; background: rgba(70,194,122,.15); border-bottom: 1px solid var(--line);
+                         font-size: 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .aviso-actualizacion a { background: var(--accent); color: #fff; font-weight: 700; padding: 8px 14px;
+                           border-radius: 10px; text-decoration: none; }
+  #respaldo textarea { min-height: 70px; font-size: 12px; }
 </style>
 </head>
 <body>
@@ -98,6 +103,7 @@
   <button id="abrirConfig">Configurar IAs</button>
 </header>
 
+<div class="aviso-actualizacion oculto" id="actualizacion"></div>
 <main>
   <section class="card" id="formulario">
     <h2>Nuevo video</h2>
@@ -185,6 +191,16 @@
   <h2>Configurar IAs</h2>
   <p class="ayuda">Sin claves la app funciona en modo demo. Cada clave activa la IA real de ese paso y se guarda solo en este teléfono.</p>
   <div id="campos"></div>
+  <details id="respaldo" style="margin-top:14px">
+    <summary class="ayuda">Respaldo de claves (para pasarlas a otro teléfono)</summary>
+    <p class="ayuda">Copia este código y guárdalo en un lugar privado: contiene tus claves. Para recuperarlas, pégalo aquí y toca <b>Usar respaldo</b>.</p>
+    <textarea id="codigoRespaldo" autocomplete="off" spellcheck="false"></textarea>
+    <div class="acciones">
+      <button type="button" id="copiarRespaldo">Copiar mis claves</button>
+      <button type="button" id="usarRespaldo">Usar respaldo</button>
+    </div>
+    <div class="ayuda" id="estadoRespaldo"></div>
+  </details>
   <div class="acciones">
     <button id="cerrarConfig">Cancelar</button>
     <button id="guardarConfig" class="primario" style="margin:0">Guardar</button>
@@ -485,6 +501,41 @@ $("#guardarConfig").onclick = () => {
 
 pintarModo();
 cargarEstilos().then(pintarEstilos);
+
+// ---------- respaldo de claves ----------
+
+const PREFIJO = "videosyt-claves:";
+$("#copiarRespaldo").onclick = async () => {
+  const codigo = PREFIJO + btoa(unescape(encodeURIComponent(JSON.stringify(claves()))));
+  $("#codigoRespaldo").value = codigo;
+  try { await navigator.clipboard.writeText(codigo); $("#estadoRespaldo").textContent = "Copiado. Guárdalo en un lugar privado."; }
+  catch { $("#codigoRespaldo").select(); $("#estadoRespaldo").textContent = "Selecciona el código y cópialo."; }
+};
+$("#usarRespaldo").onclick = () => {
+  try {
+    const texto = $("#codigoRespaldo").value.trim();
+    if (!texto.startsWith(PREFIJO)) throw new Error();
+    const nuevas = JSON.parse(decodeURIComponent(escape(atob(texto.slice(PREFIJO.length)))));
+    localStorage.setItem("claves", JSON.stringify({ ...claves(), ...nuevas }));
+    $("#config").close(); pintarModo();
+  } catch { $("#estadoRespaldo").textContent = "Ese código no es un respaldo válido de Videosyt."; }
+};
+
+// ---------- actualizaciones ----------
+
+const DESCARGA = "https://github.com/wamozart321-pixel/VideosYtGeneratorx/releases/download/android-ultima/Videosyt.apk";
+async function buscarActualizacion() {
+  try {
+    const { version } = await (await fetch("./version.json")).json();
+    const r = await fetch("https://api.github.com/repos/wamozart321-pixel/VideosYtGeneratorx/releases/tags/android-ultima");
+    const nueva = Number(((await r.json()).name || "").match(/versi[oó]n (\d+)/)?.[1] || 0);
+    if (!version || nueva <= version) return;
+    $("#actualizacion").innerHTML = `<span>Hay una versión nueva de Videosyt (${nueva}). Se instala encima y tus claves se conservan.</span>
+      <a href="${DESCARGA}">Descargar</a>`;
+    $("#actualizacion").classList.remove("oculto");
+  } catch { /* sin internet o compilación local: se revisa la próxima vez */ }
+}
+buscarActualizacion();
 </script>
 </body>
 </html>

@@ -11,3 +11,5 @@ android/package-lock.json
 proyectos/
 vistas/
 android/www/estilos.json
+version.txt
+android/www/version.json

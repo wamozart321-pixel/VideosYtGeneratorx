@@ -3,6 +3,7 @@ name: Compilar Videosyt.exe
 on:
   push:
     branches: [main, app-web]
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -28,10 +29,13 @@ jobs:
           Expand-Archive ffmpeg.zip -DestinationPath ffmpeg-dist
           Copy-Item (Get-ChildItem ffmpeg-dist -Recurse -Filter ffmpeg.exe | Select-Object -First 1).FullName .
 
+      - name: Número de versión
+        run: echo ${{ github.run_number }} > version.txt
+
       - name: Empaquetar
         run: >
           pyinstaller --noconfirm --onefile --windowed --name Videosyt
-          --add-data "web;web" --add-data "estilos;estilos" --add-data "fuentes;fuentes"
+          --add-data "web;web" --add-data "estilos;estilos" --add-data "fuentes;fuentes" --add-data "version.txt;."
           --add-binary "ffmpeg.exe;." --collect-all webview app.py
 
       - name: Probar que el .exe crea un video
@@ -55,4 +59,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete windows-ultima --yes --cleanup-tag 2>$null
-          gh release create windows-ultima dist/Videosyt.exe --title "Videosyt para Windows" --notes "Descarga Videosyt.exe y ábrelo con doble clic."
+          gh release create windows-ultima dist/Videosyt.exe --title "Videosyt para Windows · versión ${{ github.run_number }}" --notes "Descarga Videosyt.exe y ábrelo con doble clic."
