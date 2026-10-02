@@ -220,14 +220,22 @@ export function componerPrompt(prompt, estilo, biblia = "") {
           biblia.trim() && `Recurring character: ${biblia.trim()}`, SIN_TEXTO].filter(Boolean).join(". ");
 }
 
+const SUAVE = "family friendly, symbolic and non-violent depiction, no blood, no gore, no nudity";
+
 async function imagenIA(escena, proyecto, claves) {
   const estilo = estiloDe(proyecto);
-  const r = await falPost(estilo.modelo, {
-    prompt: componerPrompt(escena.prompt_visual, estilo, escena.personaje === false ? "" : proyecto.biblia),
-    image_size: estilo.formato === "9:16" ? "portrait_16_9" : "landscape_16_9",
-    seed: escena.semilla ?? proyecto.semilla,
-  }, claves.FAL_KEY);
-  return r.images[0].url;
+  const prompt = componerPrompt(escena.prompt_visual, estilo, escena.personaje === false ? "" : proyecto.biblia);
+  const cuerpo = { prompt, image_size: estilo.formato === "9:16" ? "portrait_16_9" : "landscape_16_9",
+                   seed: escena.semilla ?? proyecto.semilla };
+  for (let intento = 0; intento < 3; intento++) {
+    const r = await falPost(estilo.modelo, cuerpo, claves.FAL_KEY);
+    if (!(r.has_nsfw_concepts || []).some(Boolean)) return r.images[0].url;
+    // El filtro de contenido de fal devuelve la imagen en negro (pasa con temas como violencia).
+    // Se reintenta con otra semilla y una versión más suave de la escena.
+    cuerpo.seed = (cuerpo.seed || 0) + 7919 * (intento + 1);
+    cuerpo.prompt = `${prompt}. ${SUAVE}`;
+  }
+  throw new Error("el filtro de contenido de fal.ai la dejó en negro; prueba a cambiar la descripción");
 }
 
 async function cargarImagen(src) {
@@ -298,6 +306,7 @@ Rules:
 - Follow the eras and places of the story (for example a smoky 1930s jazz club, a 1960s pirate radio ship, a modern phone screen).
 - Turn abstract ideas and metaphors into concrete visual symbols.
 - Never ask for written words, letters, logos, captions or readable signs.
+- Show violent, cruel or tragic events symbolically (shadows, empty places, meaningful objects, faces reacting), never graphic violence, bodies, blood or nudity: the image model blacks those images out.
 - Do not describe the art style; it is added later.
 - If there is a recurring character, it is the protagonist of the video: put it in about three of every four scenes, acting out or reacting to what that scene is about, inside that scene's own setting and era. Start those prompts with the character's full description and set "personaje" to true. Leave it out (false) only for establishing shots, close-ups of objects or scenes about specific real people. If there is no recurring character, "personaje" is always false.
 Reply only with a JSON array, one object per scene with the same numbers: [{"n": 1, "imagen": "...", "personaje": false}]`;

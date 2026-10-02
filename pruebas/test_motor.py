@@ -141,6 +141,33 @@ class Motor(unittest.TestCase):
         videosyt.editar_escena(p, 0, prompt_visual="a burning vinyl record")
         self.assertTrue(p["escenas"][0]["visual_propio"])
 
+    def test_imagen_en_negro_por_el_filtro_se_reintenta(self):
+        cuerpos = []
+
+        def post(url, cabeceras, cuerpo):
+            cuerpos.append(dict(cuerpo))
+            return {"images": [{"url": "file://" + self.png}], "has_nsfw_concepts": [len(cuerpos) == 1]}
+
+        p = self.proyecto()
+        with mock.patch.object(imagen, "post", post):
+            videosyt.regenerar_escena(p, 0)
+        self.assertEqual(len(cuerpos), 2)
+        self.assertNotEqual(cuerpos[0]["seed"], cuerpos[1]["seed"])
+        self.assertIn(imagen.SUAVE, cuerpos[1]["prompt"])
+        self.assertEqual(p["escenas"][0]["estado_imagen"], "ia")
+
+    def test_imagen_siempre_bloqueada_usa_respaldo(self):
+        def post(url, cabeceras, cuerpo):
+            bloqueada = "Dos" in cuerpo["prompt"]
+            return {"images": [{"url": "file://" + self.png}], "has_nsfw_concepts": [bloqueada]}
+
+        p = self.proyecto()
+        with mock.patch.object(imagen, "post", post):
+            videosyt.storyboard(p)
+        e = p["escenas"][1]
+        self.assertEqual(e["estado_imagen"], "respaldo")
+        self.assertIn("filtro de contenido", e["aviso"])
+
     def test_leer_respuesta_del_director(self):
         self.assertEqual(director.leer_respuesta('Sure: [{"n": 2, "imagen": "x", "personaje": true}]', {1, 2}),
                          {2: ("x", True)})
