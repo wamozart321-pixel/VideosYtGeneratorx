@@ -29,7 +29,7 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 CLAVES = {"voz": "ELEVENLABS_API_KEY", "imagen": "FAL_KEY"}
 NOMBRES = {"imagen": "fal.ai (imágenes)", "voz": "ElevenLabs (voz)", "video": "fal.ai (Kling)"}
 # Cuántas llamadas simultáneas acepta cada API sin devolver 429.
-LIMITES = {"imagen": 4, "voz": 3, "video": 2}
+LIMITES = {"imagen": 4, "voz": 2, "video": 2}  # el plan gratis de ElevenLabs admite 2 a la vez
 MONTAJES_A_LA_VEZ = max(1, min(4, (os.cpu_count() or 2) // 2))
 
 
@@ -325,7 +325,8 @@ def resumen_respaldos(proyecto):
     if respaldo:
         partes.append(f"imagen de respaldo en escena(s) {', '.join(map(str, respaldo))}")
     if sin_voz:
-        partes.append(f"sin voz en escena(s) {', '.join(map(str, sin_voz))}")
+        motivo = escenas[sin_voz[0] - 1]["aviso_voz"]  # dice qué arreglar (cuota, demasiadas a la vez...)
+        partes.append(f"sin voz en escena(s) {', '.join(map(str, sin_voz))} ({motivo})")
     if sin_clip:
         partes.append(f"sin clip animado en escena(s) {', '.join(map(str, sin_clip))}")
     return "; ".join(partes)
