@@ -95,10 +95,10 @@ class _Progreso:
 
 def _llamar(tipo, proveedores, semaforos, funcion, *args, intentos=4):
     """Llama a una API respetando su límite y con reintentos. Si la cuenta falla, bloquea el proveedor."""
-    motivo = proveedores.motivo(tipo)
-    if motivo:
-        raise ErrorDeCuenta(motivo)
     with semaforos[tipo]:
+        motivo = proveedores.motivo(tipo)  # se mira al tener turno: otra llamada pudo bloquearlo mientras esperaba
+        if motivo:
+            raise ErrorDeCuenta(motivo)
         try:
             return con_reintentos(funcion, *args, intentos=intentos)
         except ErrorDeCuenta as e:
