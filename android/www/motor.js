@@ -21,7 +21,7 @@ function estiloDe(proyecto) {
 
 const TAMANOS = { "16:9": [1280, 720], "9:16": [720, 1280] };
 const FPS = 25;
-const LIMITES = { imagen: 4, voz: 3, video: 2 };  // llamadas a la vez por API
+const LIMITES = { imagen: 4, voz: 2, video: 2 };  // llamadas a la vez por API (ElevenLabs gratis admite 2)
 const NOMBRES = { imagen: "fal.ai (imágenes)", voz: "ElevenLabs (voz)", video: "fal.ai (clips de video)" };
 
 // ---------- 1. Escenas (sin IA; formato de Scripzy) ----------
@@ -565,6 +565,8 @@ export function resumenRespaldos(proyecto) {
   const imagenes = proyecto.escenas.filter(e => e.estado === "respaldo").length;
   const voces = proyecto.escenas.filter(e => e.aviso_voz).length;
   if (imagenes) avisos.push(`${imagenes} escena(s) usaron una imagen de respaldo.`);
-  if (voces) avisos.push(`${voces} escena(s) quedaron sin voz porque ElevenLabs falló.`);
+  // El motivo (p. ej. 429 por demasiadas a la vez, o cuota agotada) dice qué hay que arreglar.
+  const motivo = proyecto.escenas.find(e => e.aviso_voz)?.aviso_voz;
+  if (voces) avisos.push(`${voces} escena(s) quedaron sin voz porque ElevenLabs falló: ${motivo}`);
   return avisos;
 }
