@@ -9,6 +9,8 @@ from .http import descargar, post
 from .montaje import ruta_filtro
 
 
+# 1280x720 sigue por debajo de 1 megapíxel (fal cobra por megapíxel): más nitidez para el video 1080p al mismo precio.
+TAMANO_IMAGEN = {"16:9": {"width": 1280, "height": 720}, "9:16": {"width": 720, "height": 1280}}
 SUAVE = "family friendly, symbolic and non-violent depiction, no blood, no gore, no nudity"
 
 
@@ -35,7 +37,7 @@ def generar(prompt, estilo, destino, biblia="", semilla=None):
     """Genera la imagen con Flux y devuelve su URL. Requiere FAL_KEY."""
     cuerpo = {
         "prompt": componer_prompt(prompt, estilo, biblia),
-        "image_size": "portrait_16_9" if estilo["formato"] == "9:16" else "landscape_16_9",
+        "image_size": TAMANO_IMAGEN[estilo["formato"]],
     }
     if semilla is not None:
         cuerpo["seed"] = semilla  # semilla propia por escena: varía la composición

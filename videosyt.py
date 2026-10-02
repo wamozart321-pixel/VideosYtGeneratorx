@@ -24,7 +24,7 @@ from concurrent.futures import ThreadPoolExecutor
 from proveedores import clip_video, director, guion, imagen, montaje, voz
 from proveedores.reintentos import ErrorDeCuenta, Proveedores, con_reintentos
 
-TAMANOS = {"16:9": (1280, 720), "9:16": (720, 1280)}
+TAMANOS = {"16:9": (1920, 1080), "9:16": (1080, 1920)}  # 1080p
 AQUI = os.path.dirname(os.path.abspath(__file__))
 CLAVES = {"voz": "ELEVENLABS_API_KEY", "imagen": "FAL_KEY"}
 NOMBRES = {"imagen": "fal.ai (imágenes)", "voz": "ElevenLabs (voz)", "video": "fal.ai (Kling)"}

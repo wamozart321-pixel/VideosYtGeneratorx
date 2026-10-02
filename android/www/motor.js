@@ -19,7 +19,7 @@ function estiloDe(proyecto) {
            modelo: CALIDADES[proyecto.calidad] || CALIDADES.rapida, subtitulos: proyecto.subtitulos ?? true };
 }
 
-const TAMANOS = { "16:9": [1280, 720], "9:16": [720, 1280] };
+const TAMANOS = { "16:9": [1920, 1080], "9:16": [1080, 1920] };  // 1080p
 const FPS = 25;
 const LIMITES = { imagen: 4, voz: 2, video: 2 };  // llamadas a la vez por API (ElevenLabs gratis admite 2)
 const NOMBRES = { imagen: "fal.ai (imágenes)", voz: "ElevenLabs (voz)", video: "fal.ai (clips de video)" };
@@ -220,12 +220,14 @@ export function componerPrompt(prompt, estilo, biblia = "") {
           biblia.trim() && `Recurring character: ${biblia.trim()}`, SIN_TEXTO].filter(Boolean).join(". ");
 }
 
+// 1280x720 sigue por debajo de 1 megapíxel (fal cobra por megapíxel): más nitidez para el video 1080p al mismo precio.
+const TAMANO_IMAGEN = { "16:9": { width: 1280, height: 720 }, "9:16": { width: 720, height: 1280 } };
 const SUAVE = "family friendly, symbolic and non-violent depiction, no blood, no gore, no nudity";
 
 async function imagenIA(escena, proyecto, claves) {
   const estilo = estiloDe(proyecto);
   const prompt = componerPrompt(escena.prompt_visual, estilo, escena.personaje === false ? "" : proyecto.biblia);
-  const cuerpo = { prompt, image_size: estilo.formato === "9:16" ? "portrait_16_9" : "landscape_16_9",
+  const cuerpo = { prompt, image_size: TAMANO_IMAGEN[estilo.formato],
                    seed: escena.semilla ?? proyecto.semilla };
   for (let intento = 0; intento < 3; intento++) {
     const r = await falPost(estilo.modelo, cuerpo, claves.FAL_KEY);
@@ -533,7 +535,7 @@ export async function renderizar({ proyecto, clips, claves, audio, lienzo, avisa
   const flujo = lienzo.captureStream(FPS);
   flujo.addTrack(destino.stream.getAudioTracks()[0]);
   const tipo = formatoGrabacion();
-  const grabadora = new MediaRecorder(flujo, { mimeType: tipo, videoBitsPerSecond: 5_000_000 });
+  const grabadora = new MediaRecorder(flujo, { mimeType: tipo, videoBitsPerSecond: 10_000_000 });
   const partes = [];
   grabadora.ondataavailable = ev => ev.data.size && partes.push(ev.data);
   const terminado = new Promise(ok => { grabadora.onstop = ok; });
