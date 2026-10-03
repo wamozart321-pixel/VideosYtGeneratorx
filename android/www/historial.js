@@ -1,15 +1,18 @@
 // Historial de videos hechos, guardado en el teléfono (IndexedDB de la app).
 // Los datos (título, fecha, miniatura) y el video van en almacenes separados para
-// que la lista se cargue rápido sin leer los videos.
+// que la lista se cargue rápido sin leer los videos. Con cada video se guarda también su
+// storyboard (escenas e imágenes) para poder rehacerlo sin volver a pagar las imágenes.
 
-const BASE = "videosyt", VERSION = 1;
+const BASE = "videosyt", VERSION = 2;
 
 function abrir() {
   return new Promise((ok, mal) => {
     const pedido = indexedDB.open(BASE, VERSION);
-    pedido.onupgradeneeded = () => {
-      pedido.result.createObjectStore("videos", { keyPath: "id" });
-      pedido.result.createObjectStore("archivos");
+    pedido.onupgradeneeded = () => {  // la versión 1 no tenía "proyectos"
+      const db = pedido.result;
+      if (!db.objectStoreNames.contains("videos")) db.createObjectStore("videos", { keyPath: "id" });
+      if (!db.objectStoreNames.contains("archivos")) db.createObjectStore("archivos");
+      if (!db.objectStoreNames.contains("proyectos")) db.createObjectStore("proyectos");
     };
     pedido.onsuccess = () => ok(pedido.result);
     pedido.onerror = () => mal(pedido.error);
@@ -26,16 +29,25 @@ async function operar(almacenes, modo, trabajo) {
   });
 }
 
-/** Guarda un video terminado y devuelve sus datos. */
-export async function guardarVideo({ blob, titulo, estilo, miniatura }) {
+/**
+ * Guarda un video terminado y devuelve sus datos. `storyboard` ({ proyecto, imagenes }) es
+ * opcional: el proyecto sin objetos del navegador y una imagen (Blob) por escena.
+ */
+export async function guardarVideo({ blob, titulo, estilo, miniatura, storyboard }) {
   navigator.storage?.persist?.();  // pide que Android no borre el historial si falta espacio
   const datos = { id: `${Date.now()}`, titulo, estilo, miniatura, fecha: new Date().toISOString(),
-                  tamano: blob.size, tipo: blob.type };
-  await operar(["videos", "archivos"], "readwrite", tx => {
+                  tamano: blob.size, tipo: blob.type, rehacer: Boolean(storyboard) };
+  await operar(["videos", "archivos", "proyectos"], "readwrite", tx => {
     tx.objectStore("videos").put(datos);
     tx.objectStore("archivos").put(blob, datos.id);
+    if (storyboard) tx.objectStore("proyectos").put(storyboard, datos.id);
   });
   return datos;
+}
+
+/** El storyboard con que se hizo un video ({ proyecto, imagenes }), o undefined. */
+export function leerStoryboard(id) {
+  return operar(["proyectos"], "readonly", tx => tx.objectStore("proyectos").get(id));
 }
 
 /** Datos de todos los videos, del más nuevo al más viejo. */
@@ -49,9 +61,10 @@ export function leerVideo(id) {
 }
 
 export function borrarVideo(id) {
-  return operar(["videos", "archivos"], "readwrite", tx => {
+  return operar(["videos", "archivos", "proyectos"], "readwrite", tx => {
     tx.objectStore("videos").delete(id);
     tx.objectStore("archivos").delete(id);
+    tx.objectStore("proyectos").delete(id);
   });
 }
 
