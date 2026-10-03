@@ -12,13 +12,16 @@
             --accent: #ff5f63; --soft: #24242a; --ok: #46c27a; }
   }
   * { box-sizing: border-box; }
+  html, body { overflow-x: hidden; }
   body { margin: 0; background: var(--bg); color: var(--text);
          font: 16px/1.5 system-ui, Roboto, sans-serif; padding-bottom: env(safe-area-inset-bottom); }
   header { display: flex; align-items: center; padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
            background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 2; }
   .logo { font-weight: 800; font-size: 20px; } .logo span { color: var(--accent); }
   header button { margin-left: auto; font-size: 14px; padding: 8px 10px; }
-  main { max-width: 640px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+  /* minmax(0, 1fr): sin esto la columna crecía al ancho de su contenido más ancho y la página
+     quedaba más ancha que el teléfono (había que deslizar de lado, como "modo PC"). */
+  main { max-width: 640px; margin: 0 auto; padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
   h2 { font-size: 13px; margin: 0 0 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
   label.t { display: block; font-weight: 600; margin: 14px 0 8px; }
@@ -35,8 +38,9 @@
   .tag { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 99px; white-space: nowrap;
          background: var(--soft); color: var(--muted); }
   .tag.con { background: rgba(224,167,67,.22); color: #c27c0e; }
-  .segmento { display: flex; gap: 6px; }
-  .segmento button { flex: 1; } .segmento button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+  .segmento { display: flex; gap: 6px; flex-wrap: wrap; }
+  .segmento button { flex: 1 1 0; min-width: 0; padding: 10px 6px; }
+  @media (max-width: 420px) { #calidad button { flex-basis: calc(50% - 3px); } }  /* 4 opciones: 2 por fila */ .segmento button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 700; }
   dialog#selector { width: 100%; max-width: 100%; height: 100%; max-height: 100%; margin: 0; border: 0; border-radius: 0; padding: 0; }
   #selector .cabeza { padding: calc(12px + env(safe-area-inset-top)) 16px 12px; position: sticky; top: 0;
                       background: var(--panel); z-index: 1; border-bottom: 1px solid var(--line); }
