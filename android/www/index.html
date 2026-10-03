@@ -225,7 +225,7 @@
 
 <script type="module">
 import { ESTILOS, RITMOS, cargarEstilos, vistaPrevia, escenas, crearStoryboard, regenerarEscena, renderizar } from "./motor.js";
-import { guardarVideo, listarVideos, leerVideo, borrarVideo, marcarArchivo } from "./historial.js";
+import { guardarVideo, listarVideos, leerVideo, borrarVideo, marcarArchivo, leerStoryboard } from "./historial.js";
 
 const $ = s => document.querySelector(s);
 const CAMPOS = [
@@ -451,7 +451,7 @@ $("#render").onclick = async () => {
     $("#resultado").classList.remove("oculto");
     try {
       ({ id: idActual } = await guardarVideo({ blob, titulo: tituloDe($("#guion").value), estilo: ESTILOS[proyecto.estilo]?.nombre || "",
-                           miniatura: portada(proyecto) }));
+                           miniatura: portada(proyecto), storyboard: await storyboardParaGuardar(proyecto, $("#guion").value) }));
       $("#guardado").textContent = "Guardado en Mis videos.";
     } catch (e) {
       console.error(e);
@@ -491,6 +491,50 @@ function portada(p) {
   try { return c.toDataURL("image/jpeg", 0.7); } catch { return ""; }
 }
 
+/** Cada imagen en JPEG (las de OpenAI son PNG de varios MB) para guardar el storyboard junto al video. */
+async function jpeg(img) {
+  if (!img) return null;
+  const c = document.createElement("canvas");
+  c.width = img.naturalWidth || img.width; c.height = img.naturalHeight || img.height;
+  c.getContext("2d").drawImage(img, 0, 0);
+  return new Promise(ok => c.toBlob(ok, "image/jpeg", 0.92));
+}
+
+/** El proyecto sin objetos del navegador (imágenes, audio, clips) y una imagen por escena. */
+async function storyboardParaGuardar(p, guion) {
+  try {
+    const escenas = p.escenas.map(({ fuente, src, clip, audio, trozos, ...resto }) => resto);
+    const imagenes = await Promise.all(p.escenas.map(e => jpeg(e.fuente)));
+    return { proyecto: { ...p, guion, escenas, avisos: [] }, imagenes };
+  } catch (e) {
+    console.error(e);
+    return undefined;  // el video se guarda igual, solo que sin la opción de rehacerlo
+  }
+}
+
+async function cargarFoto(blobImagen) {
+  const img = new Image();
+  img.src = URL.createObjectURL(blobImagen);
+  await img.decode();
+  return img;
+}
+
+/** Abre el storyboard de un video ya hecho para cambiar algo y volver a crearlo. */
+async function rehacer(v) {
+  const guardado = await leerStoryboard(v.id);
+  if (!guardado) { alert("Este video no tiene su storyboard guardado."); return; }
+  const escenas = await Promise.all(guardado.proyecto.escenas.map(async (e, i) => {
+    const imagen = guardado.imagenes[i];
+    const fuente = imagen ? await cargarFoto(imagen) : null;
+    return { ...e, fuente, src: fuente?.src || null, estado: fuente ? e.estado : "fallida" };
+  }));
+  proyecto = { ...guardado.proyecto, escenas };
+  if (proyecto.guion) { $("#guion").value = proyecto.guion; contarEscenas(); }
+  archivoActual = idActual = null;
+  pintarTablero();
+  verTablero();
+}
+
 let archivoActual = null;  // video guardado antes en Documentos/Videosyt que se está viendo
 let idActual = null;  // video del historial que se está viendo
 
@@ -506,7 +550,7 @@ async function videosGuardados() {
   } catch { return []; }  // la carpeta aún no existe o no hay permiso
 }
 
-function filaHistorial(v, alVer, alBorrar) {
+function filaHistorial(v, alVer, alBorrar, alRehacer) {
   const fila = document.createElement("div");
   fila.className = "hecho";
   const foto = v.miniatura ? document.createElement("img") : document.createElement("div");
@@ -528,7 +572,15 @@ function filaHistorial(v, alVer, alBorrar) {
     await alBorrar();
     pintarHistorial();
   };
-  acciones.append(ver, quitar);
+  acciones.append(ver);
+  if (alRehacer) {  // solo los videos hechos desde esta versión guardan su storyboard
+    const otra = document.createElement("button");
+    otra.textContent = "Rehacer";
+    otra.title = "Abre sus escenas e imágenes para cambiar algo y crear el video otra vez";
+    otra.onclick = alRehacer;
+    acciones.append(otra);
+  }
+  acciones.append(quitar);
   datos.append(titulo, info, acciones);
   fila.append(foto, datos);
   return fila;
@@ -543,7 +595,8 @@ async function pintarHistorial() {
   caja.innerHTML = "";
   $("#historialVacio").classList.toggle("oculto", Boolean(lista.length || guardados.length));
   const filas = [
-    ...lista.map(v => [v.fecha, filaHistorial(v, () => abrirDelHistorial(v), () => borrarVideo(v.id))]),
+    ...lista.map(v => [v.fecha, filaHistorial(v, () => abrirDelHistorial(v), () => borrarVideo(v.id),
+                                              v.rehacer ? () => rehacer(v) : null)]),
     ...guardados.map(v => [v.fecha, filaHistorial(v, () => abrirArchivo(v.archivo),
       () => Plugins.Filesystem.deleteFile({ path: `Videosyt/${v.archivo.name}`, directory: "DOCUMENTS" }))]),
   ].sort((a, b) => b[0].localeCompare(a[0]));
