@@ -1,7 +1,9 @@
 // Motor de Videosyt para el teléfono, en dos fases y todo dentro de la app:
 //   1. crearStoryboard: guion → escenas → imágenes (se pueden revisar, editar y regenerar)
-//   2. renderizar: voces (+ clips opcionales) → montaje grabado desde un <canvas> con MediaRecorder.
+//   2. renderizar: voces (+ clips opcionales) → montaje cuadro a cuadro en un .mp4 (WebCodecs).
 // Si una escena falla se usa un respaldo para que el video siempre termine.
+
+import { Muxer, StreamTarget } from "./mp4-muxer.js";
 
 // Catálogo compartido con la app de escritorio (estilos/estilos.json, se copia al compilar).
 export const ESTILOS = {};
@@ -606,8 +608,27 @@ export async function renderizar({ proyecto, clips, claves, audio, lienzo, avisa
     await Promise.all(trabajos);
   }));
 
-  // Grabación en tiempo real: el video tarda en montarse lo mismo que dura.
   lienzo.width = ancho; lienzo.height = alto;
+  const montaje = { lista, estilo, ancho, alto, lienzo, audio, avisar };
+  const pantalla = await navigator.wakeLock?.request("screen").catch(() => null);  // que no se apague
+  let video;
+  try {
+    const config = await configuracionMp4(ancho, alto, audio.sampleRate);
+    video = config ? await montarMp4(montaje, config) : await grabarEnVivo(montaje);
+  } finally {
+    pantalla?.release().catch(() => {});
+  }
+  proyecto.avisos = [...avisosDeBloqueo(sesion), ...resumenRespaldos(proyecto)];
+  avisar(100, "Listo");
+  return video;
+}
+
+/**
+ * Respaldo para teléfonos sin WebCodecs: graba el lienzo en tiempo real con MediaRecorder.
+ * Si la app pasa a segundo plano la imagen se congela, y el archivo puede marcar mal la duración.
+ */
+async function grabarEnVivo({ lista, estilo, ancho, alto, lienzo, audio, avisar }) {
+  // Grabación en tiempo real: el video tarda en montarse lo mismo que dura.
   const ctx = lienzo.getContext("2d");
   const destino = audio.createMediaStreamDestination();
   const flujo = lienzo.captureStream(FPS);
@@ -644,9 +665,111 @@ export async function renderizar({ proyecto, clips, claves, audio, lienzo, avisa
   }
   grabadora.stop();
   await terminado;
-  proyecto.avisos = [...avisosDeBloqueo(sesion), ...resumenRespaldos(proyecto)];
-  avisar(100, "Listo");
   return new Blob(partes, { type: tipo.split(";")[0] || "video/webm" });
+}
+
+// ---------- Montaje cuadro a cuadro (WebCodecs) ----------
+// Antes se grababa la pantalla en tiempo real: si el teléfono se bloqueaba o la app pasaba a
+// segundo plano, la imagen se quedaba quieta mientras la voz seguía, y el archivo de MediaRecorder
+// marcaba una duración equivocada. Ahora cada cuadro se dibuja y se codifica con su tiempo exacto:
+// si la app se pausa, el montaje espera y sigue donde iba, y el .mp4 sale con la duración real.
+
+async function configuracionMp4(ancho, alto, sampleRate) {
+  if (typeof VideoEncoder === "undefined" || typeof AudioEncoder === "undefined") return null;
+  const soporta = async (Codificador, c) => (await Codificador.isConfigSupported(c).catch(() => ({}))).supported;
+  let video = null, sonido = null;
+  // H.264 (High, Main, Baseline) se reproduce en todas partes; VP9 solo si el teléfono no codifica H.264.
+  for (const [codec, nombre] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42002a", "avc"], ["vp09.00.40.08", "vp9"]]) {
+    const c = { codec, width: ancho, height: alto, bitrate: 6_000_000, framerate: FPS,
+                ...(nombre === "avc" && { avc: { format: "avc" } }) };
+    if (await soporta(VideoEncoder, c)) { video = { config: c, nombre }; break; }
+  }
+  for (const [codec, nombre] of [["mp4a.40.2", "aac"], ["opus", "opus"]]) {
+    const c = { codec, sampleRate, numberOfChannels: 2, bitrate: 128_000 };
+    if (await soporta(AudioEncoder, c)) { sonido = { config: c, nombre }; break; }
+  }
+  return video && sonido ? { video, sonido } : null;
+}
+
+/**
+ * Recibe el .mp4 por trozos de 8 MB y los guarda como Blob (el navegador puede pasarlos a disco).
+ * Al final mp4-muxer corrige la cabecera del inicio, que está en el primer trozo.
+ */
+function escritorPorPartes() {
+  const partes = [];
+  let primera = null, fin = 0;
+  return {
+    destino: new StreamTarget({ chunked: true, chunkSize: 8 * 2 ** 20, onData: (datos, pos) => {
+      if (pos === fin) {
+        if (primera) partes.push(new Blob([datos])); else primera = datos.slice();
+        fin += datos.length;
+      } else if (primera && pos + datos.length <= primera.length) primera.set(datos, pos);
+      else throw new Error("El montaje escribió fuera de orden");
+    } }),
+    blob: () => new Blob([primera || new Uint8Array(), ...partes], { type: "video/mp4" }),
+  };
+}
+
+function buscarCuadro(v, t) {
+  if (Math.abs(v.currentTime - t) < 0.001) return Promise.resolve();
+  return Promise.race([new Promise(ok => { v.addEventListener("seeked", ok, { once: true }); v.currentTime = t; }),
+                       esperar(3000)]);  // si el clip no responde, se usa el cuadro que tenga
+}
+
+async function montarMp4({ lista, estilo, ancho, alto, lienzo, audio, avisar }, config) {
+  const escritor = escritorPorPartes();
+  const muxer = new Muxer({ target: escritor.destino, fastStart: false,
+    video: { codec: config.video.nombre, width: ancho, height: alto, frameRate: FPS },
+    audio: { codec: config.sonido.nombre, numberOfChannels: 2, sampleRate: audio.sampleRate } });
+  let fallo = null;
+  const alFallar = e => { fallo ||= e; };
+  const cv = new VideoEncoder({ output: (c, m) => muxer.addVideoChunk(c, m), error: alFallar });
+  const ca = new AudioEncoder({ output: (c, m) => muxer.addAudioChunk(c, m), error: alFallar });
+  cv.configure(config.video.config);
+  ca.configure(config.sonido.config);
+
+  // Sonido: las narraciones seguidas, en estéreo y en trozos de un segundo.
+  const inicios = [];
+  let muestras = 0;
+  for (const e of lista) {
+    const b = e.audio, canales = [0, 1].map(c => b.getChannelData(Math.min(c, b.numberOfChannels - 1)));
+    inicios.push(muestras / b.sampleRate);
+    for (let i = 0; i < b.length; i += b.sampleRate) {
+      const n = Math.min(b.sampleRate, b.length - i), datos = new Float32Array(2 * n);
+      datos.set(canales[0].subarray(i, i + n));
+      datos.set(canales[1].subarray(i, i + n), n);
+      const trozo = new AudioData({ format: "f32-planar", sampleRate: b.sampleRate, numberOfFrames: n,
+                                    numberOfChannels: 2, timestamp: Math.round(muestras * 1e6 / b.sampleRate), data: datos });
+      ca.encode(trozo);
+      trozo.close();
+      muestras += n;
+    }
+  }
+
+  // Imagen: cada cuadro con su tiempo, sin depender de que la pantalla esté activa.
+  const ctx = lienzo.getContext("2d"), cuadros = Math.ceil(muestras / audio.sampleRate * FPS);
+  let escena = 0;
+  for (let f = 0; f < cuadros; f++) {
+    if (fallo) throw fallo;
+    const t = f / FPS;
+    while (escena < lista.length - 1 && t >= inicios[escena + 1]) escena++;
+    const e = lista[escena], local = t - inicios[escena];
+    if (e.clip) await buscarCuadro(e.clip, local % (e.clip.duration || 5));
+    dibujar(ctx, e, local, estilo, ancho, alto);
+    const cuadro = new VideoFrame(lienzo, { timestamp: Math.round(t * 1e6), duration: Math.round(1e6 / FPS) });
+    cv.encode(cuadro, { keyFrame: f % (FPS * 2) === 0 });
+    cuadro.close();
+    if (cv.encodeQueueSize > 8) await new Promise(ok => cv.addEventListener("dequeue", ok, { once: true }));
+    if (f % FPS === 0) {
+      avisar(50 + Math.round(48 * f / cuadros), `Montando escena ${escena + 1} de ${lista.length}`);
+      await esperar(0);  // deja que la pantalla muestre el progreso
+    }
+  }
+  await Promise.all([cv.flush(), ca.flush()]);
+  if (fallo) throw fallo;
+  muxer.finalize();
+  cv.close(); ca.close();
+  return escritor.blob();
 }
 
 export function resumenRespaldos(proyecto) {
